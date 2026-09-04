@@ -1,0 +1,316 @@
+# =====================================================================
+# Bench 설정 — CloudChaser Stampede(TX) EVB
+# 실험 PC의 실제 환경에 맞춰 값만 수정하면 된다. 코드 수정 불필요.
+#
+# i_limit 은 Sivers 레퍼런스 셋업(동일 PSU 전원 인가 사진) 기준으로 설정함:
+#   4V(FE1) 와 DIG_1.8V = 0.3A, 나머지 채널 = 0.4A.
+# ⚠️ ovp 는 아직 안전 기본값(추정)이며, 25V 채널은 코드가 자동으로 허용값까지 올린다.
+# ⚠️ power_up_order 는 데이터시트/EVB User Manual 기준으로 확정 권장.
+#    기본값: 디지털·IO 레일 우선 → FE/아날로그 후순위.
+# =====================================================================
+
+[ramp]
+step_v   = 0.2      # 램프 1스텝 전압 증가량 [V]
+settle_s = 0.1      # 스텝 사이 안정화 대기 [s] (Matlab Record 전 0.1s pause 패턴)
+
+# 파워업 스테이지 — Sivers 확정 타이밍 다이어그램(2026-09-03 Reza 회의, "STAMPEDE 2731
+# Power Supply Sequencing Timing Diagram"). 스테이지 안의 레일은 함께(lockstep) 올리고,
+# 스테이지 사이는 stage_delay_s 이상 쉰다.
+#   ① VDD_DIG = 1.0V
+#   ② VDD_FE2 / VDD_FE3 / VDD_1p8V_DIST / VDD_1p8_ANA / VDD_1p8_IO = 1.8V  (여기서 SPI active)
+#   ③ VDD_FE1 = 4V
+# 이 EVB 는 PSU 가 6채널뿐이라 칩의 1.8V 넷 5개를 2채널로 묶는다(2026-09-03 재배선):
+#   IO_ANA_1V8 = IO_SOUTH + IO_NORTH + ANA(5핀)  -> Sivers IDC_1p8
+#   DIST_1V8   = DIST(K9 + K27)                   -> Sivers IDC_Dist
+# 이렇게 물리면 저쪽 전류 컬럼과 1:1 로 비교된다. 그래서 ②가 4개 레일이다.
+power_up_stages = [
+  ["CORE_1V0"],
+  ["DIST_1V8", "IO_ANA_1V8", "FE2_1V8", "FE3_1V8"],
+  ["FE1_4V0"],
+]
+stage_delay_s = 0.5   # 스테이지 사이 최소 대기 [s] (다이어그램 note: min 500 ms)
+
+# 파워다운 계단식 강하 plateau (내림차순). 같은 다이어그램의 POWER-DOWN SEQUENCE:
+#   ① FE1 4V->1.8V  ② 전 1.8V 레일 1.8V->1V  ③ 전체(VDD_DIG 포함) 1V->0V.
+# 각 plateau 에서 '현재 전압이 그보다 높은 레일'만 함께 내린다(_set_v 기준).
+# plateau 사이에도 stage_delay_s 를 적용한다.
+power_down_stages = [1.8, 1.0, 0.0]
+
+# ---------------------------------------------------------------------
+# PSU1 — Keysight E36313A @ 192.168.5.18
+# ---------------------------------------------------------------------
+[psu1]
+model = "Keysight E36313A"
+host  = "192.168.5.18"
+port  = 5025
+
+# trip_poll: 램프 스텝마다 STAT:QUES:COND? 로 OVP/OCP 트립을 확인할지 여부.
+# 이 벤치의 E36313A 두 대는 이 조회에 응답하지 않아, 매 세션 소켓 타임아웃(5s)을
+# 기다렸다가 폴링을 끄고 있었다(실측 2026-09-03 로그). false 로 두면 그 대기를
+# 건너뛴다 -- 보호는 그대로다: 전류제한(CC)과 OVP 는 PSU 하드웨어가 계속 건다.
+# 잃는 것은 '트립 즉시 우리 코드가 램프를 멈추는' 소프트웨어 조기중단뿐이고,
+# 이 장비에서는 어차피 동작한 적이 없다. 응답하는 장비로 바꾸면 true 로 되돌릴 것.
+trip_poll = false
+
+[[psu1.rails]]
+ch = 1
+name = "FE1_4V0"
+v_target = 4.0
+i_limit = 0.3     # Sivers 레퍼런스: 4V 채널 0.3A
+ovp = 4.5
+
+[[psu1.rails]]
+ch = 2
+name = "CORE_1V0"
+v_target = 1.0
+i_limit = 0.4     # Sivers 레퍼런스: 나머지 채널 0.4A
+ovp = 1.3
+detect = true     # SPI-only rail (1.3V on both TX & RX) -> powered first for chip auto-detect
+
+[[psu1.rails]]
+ch = 3
+name = "IO_ANA_1V8"
+v_target = 1.8
+i_limit = 0.4     # Sivers 레퍼런스: 나머지 채널 0.4A
+ovp = 2.0         # 데이터시트 Table 3 절대최대 2.1V 보다 낮게 (Table 2 동작범위 1.7~1.9V)
+detect = true     # SPI/detect rail -> powered first for chip auto-detect
+detect_v = 1.3    # detect 단계에서만 1.3V (TX/RX 공용 안전 전압), 보드 확정 후 1.8V 로 승압
+# 주의: 재배선 후 이 채널에 ANA 가 함께 물리므로, detect 단계 동안 ANA 도 1.3V(동작
+# 최소 1.7V 미만)에 있다. 저전압이라 손상 위험은 없고, version_id 확인 직후 1.8V 로
+# 올라간 뒤에야 FE1(4V)이 인가되므로 RF 측정은 항상 정규 전압에서 이뤄진다.
+# 이 레일은 VDD_1p8V_IO_SOUTH + IO_NORTH + VDD_1p8V_ANA(5핀) 을 함께 문다
+# (2026-09-03 재배선). Sivers 레퍼런스 CSV 의 IDC_1p8 (13.9 mA) 에 대응한다.
+# ANA 는 bandgap/LDO/ADC/temp sensor/power detector 를 먹인다 -- 재배선 전에는
+# DIST 채널에 물려 있었고, DIST 코드와 무관한 약 13.2 mA 바닥으로 관측됐다.
+# 칩 spec 은 1.8V 이고, 2026-09-03 회의에서
+# **1.8V 가 정상**임이 확정됐다 -- 기존 1.3V 는 GlobalFoundries 이슈가 아니라 EVB 의
+# CHIP ID 핀 풀다운(10k) 문제였다. CID 풀다운을 GND 로 직접 쇼트하는 보드 리워크를
+# 하면 1.8V 에서 정상 동작한다(Reza 슬라이드 "Root cause: CHIP ID board problem").
+# ⚠️ 리워크 전 보드에 1.8V 를 걸면 예전 오동작 조건 그대로다. 리워크 여부가 불확실하면
+#    detect 단계(1.3V)에서 version_id 가 정상인지 먼저 확인할 것 -- 실패하면 FE 레일은
+#    올라가지 않는다.
+# 1.3V 미만으로는 절대 내리지 말 것 -- SPI 리드백이 1비트 밀린다(vault wiki/errors 참조).
+# 실측 0.65 mA(@1.3V). Sivers 의 IDC_Dist(64.4 mA)는 이 레일이 아니다(2026-09-02 자코비안).
+
+# ---------------------------------------------------------------------
+# PSU2 — Keysight E36313A @ 192.168.5.19
+# ---------------------------------------------------------------------
+[psu2]
+model = "Keysight E36313A"
+host  = "192.168.5.19"
+port  = 5025
+
+trip_poll = false   # 위 psu1 주석 참조
+
+[[psu2.rails]]
+ch = 1
+name = "DIST_1V8"
+v_target = 1.8
+i_limit = 0.3
+ovp = 2.1
+detect = true     # 1.8V on both TX & RX at this channel -> safe to power before board detect
+# 이 레일은 VDD_1p8V_DIST 2핀(BGA K9, K27) = 분배망(splitter/combiner) 전용이다
+# (2026-09-03 재배선). Sivers 레퍼런스 CSV 의 IDC_Dist (64.4 mA) 에 대응한다.
+# 이름의 DIG 는 EVB 실크에서 온 오칭이었다 -- 디지털(VDD_DIG 1.0V)은 CORE_1V0 이다.
+
+[[psu2.rails]]
+ch = 2
+name = "FE2_1V8"
+v_target = 1.8
+i_limit = 0.4     # Sivers 레퍼런스: 나머지 채널 0.4A
+ovp = 2.1
+
+[[psu2.rails]]
+ch = 3
+name = "FE3_1V8"
+v_target = 1.8
+i_limit = 0.4     # Sivers 레퍼런스: 나머지 채널 0.4A
+ovp = 2.1
+
+# ---------------------------------------------------------------------
+# SG — Rohde & Schwarz SMW200A @ 192.168.5.14
+# 1차에서는 RF 출력 OFF 상태로 파라미터만 셋업한다.
+# ---------------------------------------------------------------------
+[sg]
+model = "R&S SMW200A"
+host  = "192.168.5.14"
+port  = 5025
+freq_hz = 28.0e9    # TODO: 측정 주파수
+level_dbm = -30.0   # TODO: 시작 전력 (안전한 낮은 값)
+rf_output = false   # 1차: 측정 직전까지 OFF
+
+# ---------------------------------------------------------------------
+# SA — Rohde & Schwarz FSVA3030 @ 192.168.5.12
+# ---------------------------------------------------------------------
+[sa]
+model = "R&S FSVA3030"
+host  = "192.168.5.12"
+port  = 5025
+spectrum_mode = true  # 설정 전 스펙트럼 모드로 진입(SPAN 'function not available' 방지)
+center_hz = 28.0e9  # TODO: 측정 주파수
+span_hz = 100.0e6
+rbw_hz = 1.0e6
+ref_level_dbm = 0.0
+input_atten_db = 10.0
+# 이 SA(FSVA3030) 의 실사용 상한은 29.5 GHz 다. 30 GHz 부터는 잡음바닥(-68 dBm 부근)만
+# 읽혀 게인이 -40 dB 로 나온다 -- 칩이 아니라 계측기 한계다. verify 는 이 값을 넘는
+# 주파수를 건너뛴다. Sivers 레퍼런스는 FSW-43(43 GHz)로 재서 31 GHz 까지 있다.
+max_freq_hz = 29.5e9
+
+# ---------------------------------------------------------------------
+# VNA — Anritsu MS4644B VectorStar (phase_index_accuracy 전용, 옵션 장비)
+# 측정 전 VNA 캘리브레이션은 사용자가 수동으로 해 둔다 — 코드는 preset 안 함.
+# connect_all 대상이 아니므로 VNA 가 없어도 다른 측정은 그대로 동작한다.
+# ---------------------------------------------------------------------
+[vna]
+model   = "Anritsu MS4644B"
+host    = "192.168.5.15"   # TODO: 실제 VNA IP 로 수정
+port    = 5001             # Anritsu raw-socket SCPI 포트(5025 아님) — 계기에서 확인
+timeout = 10.0
+
+# ---------------------------------------------------------------------
+# 보드 (Stampede TX) bring-up 설정
+# ---------------------------------------------------------------------
+[board]
+chip_id = 0
+beam = "b0"
+# 활성화할 채널 목록. SA 는 beam 출력 1개를 보므로, 여기 적은 채널들이 합쳐져 측정된다.
+# 지금은 Beam0 H0 에만 케이블 연결 → ["h0"] 만 측정.
+# 채널을 늘리려면 예: ["h0","h1","h2","h3"] 처럼 추가하면 된다(코드 수정 불필요).
+active_channels = ["h0"]
+# cal_freq_sel 코드 (데이터시트 표 참고).
+# NOTE: bring_up_tx 의 raw 시퀀스는 이 키를 더 이상 기입하지 않는다(스펙 4장 TX 표에
+# 해당 단계가 없고 evb_full 도 안 쓴다) -- 0 이 아니면 bring-up 이 "ignored" 로 로그만 남긴다.
+cal_freq_code = 0x0
+common_gain = 0x00      # b{n}_common_gain (6-bit 감쇠 코드, 0=최대 게인).
+                        # bring-up 이 B0/B1/B2(0x1005~0x1007) 세 워드에 모두 기입한다.
+
+# DIST 스플리터 split 모드 (TX 전용). 세션 중에는 split(True/False) 로도 바꾼다
+# (그 헬퍼가 이 값을 갱신하고 bring-up 을 다시 돌린다 -- 여기 값은 시작 기본값).
+#   true  = 0x1009=783 (beam0 분배망 CH0..CH3 전부 enable = 다채널 결합)
+#           + 0x1068=0x8888 (CH0 captune). Doosan 260729 설정
+#   false = thru (단일채널). 위 두 워드를 안 쓴다
+# 채널 라우팅(chan/enable/disable, tx_suite 시작)은 0x1009 를 단일 채널 분기로
+# 되돌리므로, 라우팅 직후 이 설정이 자동으로 다시 적용된다(apply_split_mode).
+# 주의: 0x1009 는 b0 전용 주소다. beam 이 b1/b2 면 split 은 아직 검증 안 됨
+#       (자세한 근거는 board/bringup.py 의 SPLIT_REGS_TX 주석).
+split_mode = true
+
+# v4 시트의 최적화 bias 적용 여부. **TX 에서 이 스위치는 FE bias 만 바꾼다.**
+#   true  = FE PTAT 에 Casper 값(15/45/55)을 활성 채널에 명시 기입
+#   false = evb_full 베이스라인. FE PTAT 는 die eFuse 리드백 그대로 두고,
+#           DIST 는 그대로 MATLAB 이 늘 쓰던 값(= Casper 값)으로 고정된다.
+# "최적화 전부 해제"가 아니다: step 10 의 set_dist_bias() 결과를 step 18 의
+# DIRECT_REGS_TX(0x104C=3378, 0x104D, 0x1052=8)가 무조건 덮어쓰기 때문에, false 로
+# 둬도 DIST bias 는 한 비트도 안 바뀐다. 실제로 갈리는 건 FE PTAT(0x1038/0x103C)뿐이다.
+# 그게 의도된 동작이다 -- DIRECT_REGS_TX 값은 evb_full.py 의 MATLAB 하드코딩에서 왔고
+# v4 시트 분석상 그 DIST 값들이 곧 Casper 값이다(MATLAB 은 처음부터 최적화된 DIST 를
+# 썼다). 조건부로 만들면 evb_full 과 레지스터가 갈려서 이 마이그레이션의 1번 목표
+# (레지스터 동일성)가 깨진다.
+# DIST bias 를 정말 A/B 하려면 board/bringup.py 의 DIRECT_REGS_TX 를 직접 편집해야 한다.
+# 적용 전/후 gain·Pdc 델타를 비교하려면 이 값만 바꿔 두 번 측정한다(FE 델타만 본다).
+optimized_bias = true
+
+# 0x104D[5:0] = DIST_B0_St2_1_PTAT (CH2-3용).
+#   13 = 시트 v4 Casper (기본)   /   28 = 기존 MATLAB 하드코딩
+# 두 값 중 어느 쪽이 맞는지 실측 확인이 필요한 열린 항목이다.
+# (이건 DIRECT_REGS 경로로 들어가므로 optimized_bias 와 무관하게 항상 적용된다.)
+dist_st2_1_ptat = 13
+
+# 벤더 드라이버의 load_efuse() 실행 여부.
+#   false = evb_full.py 와 동일 (spi.reset() 만). 기본값.
+#   true  = chip.init() 호출 -> 레지스터 맵의 EFUSE_INSTRUCTIONS 스크립트 실행.
+# **이 스위치로는 "bias 트림이 안 올라왔나"를 A/B 할 수 없다.** Stampede rev_1 의
+# EFUSE_INSTRUCTIONS 는 8단계뿐이고 0x1055 / 0x1058 / 0x1059 / 0x1068-0x106B 만
+# 만지는데, bring-up 이 그 전부를 뒤에서 덮는다(step 8 captune, step 11 extra,
+# step 18 DIRECT_REGS, step 19 split). 즉 true 로 켜도 최종 레지스터에 남는 차이는
+# 0x1055 의 daisy_chain3_bias 가 (RCLR 로) 지워진다는 것 하나뿐이다.
+# 트림이 실제로 올라오는지 보려면 bring-up "전에" 0x1055/0x1058/0x1059 와
+# get_fe_bias()/get_dist_bias() 를 읽어 남겨야 한다 -- docs/SESSION.md 참고.
+run_efuse_init = false
+
+# ---------------------------------------------------------------------
+# 실측 확정 bias 코드 (bias_match 로 이 보드에서 직접 찾은 값).
+#
+# bring-up 의 마지막 쓰기 단계에서 v4 Casper 위에 덮어쓴다 -- step 18 의
+# DIRECT_REGS_TX 가 0x104C 에 Casper DIST(50/13)를 하드코딩으로 넣기 때문에,
+# 그보다 먼저 쓰면 지워진다. 여기 없는 채널은 Casper 값이 그대로 남는다.
+#
+# h0 근거 (2026-09-02, split 모드, VDD_FE1 4V, Pin -28 dBm):
+#   게인 22.01 dB @27.5 GHz -- 데이터시트 typ 22.0 에 0.01 dB
+#   IDC_FE1 -4.2% / FE2 -0.2% / FE3 -4.9% / 1p0 -2.8% -- 전부 +-10% 이내
+#   OP1dB 17.8(27.5) / 18.8(28.0) / 18.5(28.5) dBm -- 데이터시트 min 19.5 미달
+#
+# st2_1 을 0 -> 6 으로 켠 이유: 게인 23.18 -> 22.01(typ 에 근접)이면서 OP1dB 도
+# 17.39 -> 17.77 로 함께 개선된다. 게인만 보면 0 이 높지만 typ 목표에는 6 이 맞다.
+#
+# OP1dB 는 바이어스로 더 못 올린다(2026-09-02 실측):
+#   - DIST 조합 6가지 전부 Psat 19.14~19.23 dBm 로 동일 -> 앞단 한계 아님
+#   - ptat_st1 17/18/19 에서 OP1dB 불변 또는 악화 -> 정지전류 한계 아님
+#   - 압축 시 FE1 만 33.6->92.6 mA(2.8배), FE2 1.2배, FE3 거의 불변 -> PA 포화 한계
+#   상세: vault wiki/sources/2026-09-02_Sivers-레퍼런스-전류매칭-실측
+#
+# ⚠️ DIST 는 빔당 1행이라 한 빔의 채널들이 서로 다른 DIST 를 동시에 못 가진다.
+#    chan() 이 채널 전환 시 그 채널의 코드로 다시 기입한다.
+# ---------------------------------------------------------------------
+# 2026-09-03 확정 동작점 (28 GHz, split, 4V). 근거는 docs/SESSION.md 참조.
+#   gain 22.14 dB (spec 19/22/25) / OP1dB 19.75 dBm (spec min 19.5) -- 둘 다 통과
+#   PSAT 21.2 dBm 은 spec min 22.5 미달 -- bias 로는 못 올린다(전 조합 21.1~21.5)
+# dist_st2_1 = 63 을 고른 이유: st2_1 은 DIST 전류를 올리면서 게인은 오히려 조금
+#   낮추는 유일한 축이다(0->63 에서 26.8->48.7 mA, 게인 23.90->22.14). 덕분에
+#   성능은 그대로 두고 Sivers 레퍼런스 IDC_Dist(64.4 mA)에 52% -> 76% 까지 붙는다.
+#   st2_0 과 dist cbias 는 반대로 전류당 게인을 크게 올려(0.20~0.26 dB/mA) 48.7 mA
+#   를 넘는 순간 게인 max 25 를 깬다 -- 그래서 전류 완전 매칭은 불가능하다.
+[board.bias.h0]
+ptat = [17, 55, 61]   # ptat_st1(PA), ptat_st2(DRV), ptat_st3(Comb)
+dist = [63, 16, 63]   # dist_st1, dist_st2_0, dist_st2_1
+
+[board.bias.v1]
+# find_bias 2026-09-04: v1/b0 28.0 GHz: gain 22.65 dB, OP1dB 20.25 dBm, DIST_1V8 48.4 mA
+ptat = [13, 43, 59]   # ptat_st1(PA), ptat_st2(DRV), ptat_st3(Comb)
+dist = [63, 16, 63]   # dist_st1, dist_st2_0, dist_st2_1
+
+[board.bias.h3]
+# find_bias 2026-09-04: h3/b0 28.0 GHz: gain 21.24 dB, OP1dB 20.21 dBm, DIST_1V8 49.3 mA
+ptat = [14, 41, 57]   # ptat_st1(PA), ptat_st2(DRV), ptat_st3(Comb)
+dist = [63, 63, 16]   # dist_st1, dist_st2_0, dist_st2_1
+
+# 채널별 게인/감쇠 코드 (키는 active_channels 와 일치)
+# NOTE: bring_up_tx 의 raw 시퀀스는 이 섹션을 더 이상 기입하지 않는다(구 gain_control_*
+# 필드, 스펙 4장 TX 표에 해당 단계가 없고 evb_full 도 안 쓴다) -- 값이 있으면 bring-up이
+# "ignored" 로 로그만 남긴다. 기본값 0x8 -> 실제로는 0(미기입)이 되므로 실칩 RF 동작이
+# 예전과 달라진다는 점에 주의. 채널 게인을 바꾸려면 bring-up 후 chgain()/atten() 을 쓸 것
+# (다만 chgain(gain_target="fe")도 이 칩에서는 DEAD -- atten()/beamtable 이 실동작).
+[board.ch_gain]
+h0 = 0x8
+h1 = 0x8
+h2 = 0x8
+h3 = 0x8
+
+# 채널별 cal atten 코드(*_attn_cal, TX/RX 공통) -- 이건 raw 시퀀스에 적용된다(_cal_matrix).
+[board.ch_atten]
+h0 = 0x00
+h1 = 0x00
+h2 = 0x00
+h3 = 0x00
+
+# ---------------------------------------------------------------------
+# bias_match — Sivers 레퍼런스 IC 전류 매칭 타깃.
+# 출처: reference/Stampede_T582616915_25_Aug_26_09_30_19.csv
+#       (VDD_FE1 = 4 V, beam0/pol0/ch0 단일 채널)
+# 설계: docs/superpowers/specs/2026-09-01-bias-current-matching-design.md
+# ---------------------------------------------------------------------
+[bias_match]
+# 2026-09-03 재배선 후 레일이 저쪽 컬럼과 1:1 이 되어 DIST 타깃을 넣을 수 있게 됐다.
+#   DIST_1V8   <-> IDC_Dist 64.4 mA  -- DIST knob 3개가 직접 움직인다 -> 타깃
+#   IO_ANA_1V8 <-> IDC_1p8  13.9 mA  -- bias knob 이 없다(bandgap/LDO/IO 버퍼) -> 기록만
+#   CORE_1V0   <-> IDC_1p0   3.2 mA  -- reset 전류 = 동작 전류, 손잡이 없음 -> 기록만
+# 재배선 전 실측(4V, 27.5 GHz, 코드 63/16/6): IO 0.6 / DIST 채널 38.6(= ANA 13.2 + DIST 25.4).
+# DIST 가 레퍼런스의 40% 수준이라 타깃 64.4 로 다시 풀어야 한다.
+targets_ma  = { FE1_4V0 = 27.8, FE2_1V8 = 18.35, FE3_1V8 = 10.37, DIST_1V8 = 64.4 }
+report_only = ["IO_ANA_1V8", "CORE_1V0"]   # 기록만 하는 레일
+tol_ma      = 0.5        # 레일별 수렴 허용오차 [mA]
+avg_n       = 3          # 측정점마다 평균낼 전류 읽기 횟수
+settle_s    = 0.3        # 레지스터 기입 후 전류 읽기 전 대기 [s]
+max_iter    = 3          # 커플링 수렴용 바깥 루프 반복 횟수
+dist_ratio  = [50, 13, 13]   # DIST St1 : St2_0 : St2_1 (v4 Casper). 배율 k 로 스케일.

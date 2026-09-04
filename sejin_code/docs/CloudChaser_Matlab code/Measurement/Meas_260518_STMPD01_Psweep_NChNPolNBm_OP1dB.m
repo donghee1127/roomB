@@ -1,0 +1,339 @@
+% Copyright 2024 Sivers Semiconductors, Inc. All right reserved.
+% MixComm Proprietary Shared under NDA
+%
+% Edited by Bye-sah on 3/11/2022: Using Meas_220311_Func_Osp_Prog_1ch1polEn. PD_FE_gains = 3*ones(1,8); Added data_temp_reset.
+% Edited by Bye-sah on 2/15/2023: Modified for ES2 OSP. Power meter adjustment is no longer performed as it appears unnecessary for this setup without the external RF amp. Instead, the kP==1 power meter read is repeated. 
+% Edited by Bye-sah on 2/17/2023: Added delay before 2nd run of kP==1
+% Edited by Bye-sah on 6/05/2023: "data_temp_RFoff" is measured. Efuse biases are used. Updated prog script to "Meas_230416_Func_ES2_OSP_Prog_1ch1polEn." UID is saved. VDD_Target and meas_runtime are saved. AS PCB trace loss is used.
+% Modified by Aayush on 08/18/2023: Added an extra output .mat file to save the bias values of the amplifiers that are changed for optimum OP1dB.
+% Modified by Aayush on 01/24/2024: Modified this script for enabling Nch NPol and 1 Beam. To measure DC values at OP1dB which is the average of the OP1dB of 2 Pols of the same channel.
+% Modified by Aayush on 09/08/2025: Modified the script for one channel enabled.
+% Modified by Aayush on 09/09/2025: Modified the script for 4 channel 2 pol and 2 beam enabled.
+% Modified by Aayush on10/28/2025: Modified the script for Bench2.
+% Modified by Aayush on 11/24/2025: Modifiewd for SMW.
+% Modified by Aayush on 11/25/2025: Lower the PA4V voltage to 3 V.
+% Modified by Aayush on 5/5/2026: Modified the script for Stampede. Hard coded extra bias code for B2, PTAT Bias for B2. Added back efuse bias code back.
+%
+% Power up the EVB using the script "zInit_All_ES2_OSP_B2_PDC_Active2_C_Psweep" as "Init_PowSup_ES2_OSP_2_C_PDC_Active_Psweep" function inside it will set the DC current limit differently so that the DC current does not saturate.
+% This script enables N ch N pol 1 Beam. Does a Psweep. Calculates Pin for the respective OP1dB for 2 pols of the same channel. Measures DC values for the Pin(which is average of the Pin calculated for the 2 pols of the same channel.).
+
+%% ===== Change the variables below ===== %%
+board_EVB = 'STMPD01';
+board = [board_EVB '_RoomTemp']; % Short name of the DUT board and chamber temperature
+measName = [board '_Psweep_1Ch1Pol1BmEn']; % Measurement name that will be used in result files. Today's date will be appended.
+enabled_chan_pol = [1 0;0 0;0 0;0 0]; % enabled_chan_pol(4,2) -> 4 channel, 2 pol. The order of channels is CH0,CH1,CH2,CH3. The order of pols is H pol, V pol.
+enabled_beam = [1 0 0 0]; % enable_beam(1,4)-> 4 Beams. The order of beams is B0, B1, B2, B3. (B2 and B3 D.N.E, but the digital interface is the same.)
+k_beam = 1; % for dist_cbias_manual
+plot_gain_vs_Pout = 1;
+% Defining channel for snp PCB loss 
+k_ch = 1; k_pol = 1; % H0B0 for bias_fe_ctat and bias_fe_cbias
+
+freq = 25; % Frequency at which measurement is taken
+
+outputFile_ext2 = '_10dBAtn';
+P_Instr = [-22 -20:10]; % Power sweep at Signal generator
+
+if 1 % SPI settings
+    % Define front end attenuator and phase shifter values
+    fe_atten_code = 0; % attenuator code
+    fe_phase_code = 0; % phase code
+
+    % Define common attenuator value
+    common_atten_code = 0.*[1 1 1]; % This value will be used for all the frequencie excpet 27.5,28GHz. As stated in the slide shared by Daniel on 01/17/2024
+    
+    %Define calibration attenuator code
+    cal_atten_code = zeros(4,2,3);
+    
+    % PD/Temp sensor and ADC variables
+    temp_offset_slope = [8 8]; temp_en_core_bandgap = [1 1];
+    PD_FE_en_global = 0; PD_Bm_en_global = 0; PD_Test_en_global = 0;
+    PD_FE_gains = 2*zeros(1,8); % FE side power detectors
+    PD_Bm_gains = 2*zeros(1,4); % Beam side power detectors
+    clk_div = 1;
+
+    % Other SPI settings
+    chipID = 0;
+    clk_spi = 1e6; % Hz SPI clock
+
+    c_fe_captune_1ch1pol = 0; % 5-bit value for FE combiner captune. 2 MSB: combiner output captune. 3 LSB: combiner input captune
+    c_fe_captune = c_fe_captune_1ch1pol*(2^8+1)*[1 1 1 1]; % FE captune for channel 0-3. 16 bit numbers. % Bits <4:0> for Hpol and <12:8> Vpol
+    c_dist_captune = 0; % 4-bit value for DIST splitter captune. 2 MSB: captune between splitter st1 & st2 (extra_misc). 2 LSB: captune at the input of splitter. Applied to the splitters of all beams.
+
+end
+%% Need to change this to 29 GHz
+keyboard; % Change the name of the file with the latest Pin calibrated file
+load('Data\Uploaded\Data_260505_STMPD01_RoomTemp_Psweep_Pmtr_Cal_SMW_25GHz.mat','Pmtr_Cal','P_SigGen_All_Pmtr_Cal','freq_SigGen_Pmtr_Cal'); % Change this value for every frequency. Power at the output of the input cable, i.e., at the SW connector of the EVB
+load('Data\Uploaded\snp_221222_AS_ES2_EVB_Traces.mat','snp_PCB_Beam','snp_PCB_Ch','freq_PCB'); % freq, s2p, chan, pol
+load('Data\Uploaded\S21_240729_Atn_Loss_RoomTemp_10dB2.mat','S21'); % freq, s2p, Loading the data of 10 dB attenuator.
+freq_10dB = S21(:,1);
+
+Power_down = 0;
+pol_name = {'H' 'V'};
+outputFile_ext = ['_' 'H0' 'B0'  '_' num2str(freq) ];
+
+Pause_at_warning = 1;
+
+%% ===== No changes below  ===== %%
+% Start timer
+timerVal = tic;
+
+lastwarn(''); % Returns the last warning message.
+
+% Get the IP of the machine on which script is running.
+host_ip_txt = get_host_ip_txt();
+
+% Connect to Instruments
+Connect_B2PS1; Connect_B2PS2; Connect_PowerMeter;Connect_SMW;
+
+% Set up the SMW source
+Connect_SMW;
+fprintf(SMW,'OUTP OFF');
+fprintf(SMW,['FREQ:FIX ' num2str(freq*1e9)]);% Set up the SMW source
+
+% Set up power meter
+fprintf(PowMtr,'INIT:CONT OFF'); % Single measurement. Power meter should have averaging set to auto.
+
+if 1 % Define SPI handles
+    dev = firehawk(chipID);
+    
+    if exist('x','var')
+        x.spi_close; x.spi_initialize(clk_spi); x.spi_reset; 
+    else
+        x = Timberline; x.spi_initialize(clk_spi); x.spi_reset;
+    end
+end
+
+VDD_Target = [4 1.8 1 1.8 1.8 1.3];
+if 1 % Check the power supplies
+    DC_VI = Record_PS_VI_Return_STMPD(0,PowSup1,PowSup2);
+    if max(abs(VDD_Target - DC_VI(1:6))) > 0.005
+        fprintf('Check the power supplies.\n');
+        beep; keyboard;
+    end
+end
+
+if 1 % Run mem_test and reset the chip
+    is_mem_test_ok = MB_mem_test_spi(x,chipID,64); x.spi_reset;
+    
+    if is_mem_test_ok == 0
+        x.spi_close; clear x; unloadlibrary('Timberline');
+        x = Timberline; x.spi_initialize(clk_spi); x.spi_reset;
+        is_mem_test_ok = MB_mem_test_spi(x,chipID,64); x.spi_reset;
+        if is_mem_test_ok == 0
+            fprintf('Mem test failed. Check SPI.\n');
+            beep; keyboard;
+        end 
+    end
+end
+
+if 1 % Get IDs
+    [~,~, version_ID] = dev.get_short_ID(x);
+    [~,UID] = dev.get_unique_ID(x);
+end
+
+if 1 % Use efuse biases
+    [~,efuse_fe_bias_code]=dev.get_fe_bias(x);
+    [~,efuse_dist_bias_code_ptat,efuse_dist_bias_code_ctat]=dev.get_dist_bias(x);
+    efuse_fe_bias_code = double(efuse_fe_bias_code);
+    efuse_dist_bias_code_ptat = double(efuse_dist_bias_code_ptat);
+    efuse_dist_bias_code_ctat = double(efuse_dist_bias_code_ctat);
+    
+    bias_FE = zeros(2,4,3);
+    for kk_pol = 1:2
+        for kk_ch = 1:4
+            bias_FE(kk_pol,kk_ch,1:3) = efuse_fe_bias_code(2*(kk_ch-1)+kk_pol,1:3);
+        end
+    end
+    bias_IO = efuse_dist_bias_code_ptat(:,1:3);
+    
+    % Define FE biases
+    bias_fe_ctat = efuse_fe_bias_code(2*(k_ch-1)+k_pol,4);
+    bias_fe_cbias = efuse_fe_bias_code(2*(k_ch-1)+k_pol,5);
+    
+    % Define active splitter biases
+    k_beam_int = min(k_beam,3);
+    dist_bias_code_ctat = efuse_dist_bias_code_ctat;
+    dist_cbias_manual = efuse_dist_bias_code_ptat(k_beam_int,4:6);
+    extra_bias_code_manual = bin2dec('001000'); % <5:3>:DIST_B0_Tbias for top cascode of st1, st2_0, st2_1, <2:0>:DIST_B0_ST_1_Cbias for st1 bottom gm device
+    extra_bias_code_manual_B2 = bin2dec('001110');  % <5:3>:DIST_B2_Tbias for top cascode of st1, st2_0, st2_1, <2:0>:DIST_B2_ST_1_Cbias for st1 bottom gm device
+
+    % Hard Coding PTAT Bias for B2
+    bias_IO(3,:) = [6 6 6];
+end
+
+
+% Define output file name
+tdate = ['_' char(datetime('now','Format','yyMMdd'))];
+outputFile = ['Data\Data' tdate '_' measName outputFile_ext outputFile_ext2   'DoosanDemo.mat'];
+
+get_DC_VI = 1; % get_dc_vi records the DC in the stages where IC is programmed.
+
+% Program the board
+ % Program  the channel
+PD_FE_en = zeros(1,16);
+for kk_ch = 1:4
+    for kk_pol = 1:2
+        if enabled_chan_pol(kk_ch,kk_pol) == 1
+            PD_FE_en(4*(kk_ch-1) + 2*kk_pol + [-1 0]) = PD_FE_en_global; % [PD0H_en PD0H_bg PD0V_en PD0V_bg ... PD3H_en PD3H_bg PD3V_en PD3V_bg]
+        end
+    end
+end
+PD_Bm_en = zeros(1,8);
+for kk_beam = 1:4
+    if enabled_beam(3) == 1 && enabled_beam(4) == 1
+    keyboard; % Beam2 and Beam3 can't be used at the same time!
+    end
+    if enabled_beam(1,kk_beam) == 1
+        PD_Bm_en(2*kk_beam + [-1 0]) = PD_Bm_en_global; % [PDP0_en PDP0_bg  ... PDP3_en PDP3_bg]
+    end
+end
+adcEn = [PD_FE_en(1:2:end) temp_en_core_bandgap(1) PD_Bm_en(1:2:end) PD_Test_en_global]; % 8 FE PD, 1 temp sensor, 4 Bm PD, 1 test PD
+         
+[DC_VI_Prog, data_temp_reset] = Meas_260520_Func_STMPD_Prog_NchNpolNbmEn(get_DC_VI,x,dev,enabled_chan_pol,enabled_beam,PowSup1,PowSup2,bias_FE,bias_IO,bias_fe_ctat,bias_fe_cbias,dist_bias_code_ctat,dist_cbias_manual,extra_bias_code_manual,extra_bias_code_manual_B2,fe_atten_code,fe_phase_code,common_atten_code,cal_atten_code,temp_offset_slope,temp_en_core_bandgap,PD_FE_en,PD_FE_gains,PD_Bm_en,PD_Bm_gains,clk_div,adcEn,chipID,c_fe_captune,c_dist_captune);   
+if Pause_at_warning; Check_Lastwarn_220308; end % Pauses the script if there is a warning during programming the board.
+
+
+% Calibration indexes
+freq_All = freq;
+idx_Pcal = 0*P_Instr;
+    for k = 1:length(idx_Pcal)
+        [err,idx] = min(abs(P_SigGen_All_Pmtr_Cal - P_Instr(k)));
+        if abs(err)>0.1
+            beep; keyboard;
+        end
+        idx_Pcal(k) = idx;
+    end
+idx_Pcal_f = 0*freq_All;
+    for k = 1:length(idx_Pcal_f)
+        [err,idx] = min(abs(freq_SigGen_Pmtr_Cal - freq_All(k)));
+        if abs(err)>0.1
+            beep; keyboard;
+        end
+        idx_Pcal_f(k) = idx;
+    end
+idx_Loss_PCB_f = 0*freq_All;
+for k = 1:length(idx_Loss_PCB_f)
+    [err,idx] = min(abs(freq_PCB - freq_All(k)));
+    if abs(err)>0.1
+        beep; keyboard;
+    end
+    idx_Loss_PCB_f(k) = idx;
+end
+  
+idx_Loss_10dB_f = 0*freq_All; % Finding the index for 6 dB loss S21 value
+for k = 1:length(idx_Loss_10dB_f)
+    [err,idx] = min(abs(freq_10dB - freq_All(k)));
+    if abs(err)>0.1
+        beep; keyboard;
+    end
+    idx_Loss_10dB_f(k) = idx;
+end
+   
+Pin = Pmtr_Cal(idx_Pcal,idx_Pcal_f) + snp_PCB_Beam(idx_Loss_PCB_f,4)';
+
+%% Measurement
+nP = length(P_Instr);
+Pmtr = zeros(1,nP); % Rows determine different channels. Just enabling 1 channel this time.
+Pout = zeros(1,nP); % Rows determine different channels. Just enabling 1 channel this time.
+Gain = zeros(1,nP); % Rows determine different channels. Just enabling 1 channel this time.
+Gain_OP1dB = zeros(1,2); % Two rows are for.  First column -> Gain at OP1dB. Second Column -> OP1dB.
+t_delay = 0.2; % seconds to wait after changing the power amplitude
+DC_VI_Pin = zeros(1,length(P_Instr),12); % Records DC values at all the Input powers from Signal Generator. DC_VI_Pin(1,:,:) -> V3 or any channel is connected,
+data_temp_Pin = zeros(1,length(P_Instr)); % Reads ADC data for all the Pin values.
+
+if 1 % Read data_temp_RFoff
+    x.spi_adc_capture(chipID); x.spi_adc_capture(chipID);
+    [~,readdata] = dev.get_adc_val(x);
+    data_temp_RFoff = readdata(1);
+end
+
+fprintf(SMW,'OUTP ON');
+
+t_kP1_pause = 5; % seconds to wait after the power amplitude is set for the first value of P_Instr.
+ 
+for k_Meas = 1 % Keeps track of the channel. Can be changed if we are measuring multiple channels
+    % Take measurement
+    Connect_PowerMeter; PowMtr.Timeout = 25; % These two commands are important for getting the result after the averaging is done on the power meter
+    for kP = 1:nP
+        % Set the SMW source power 
+        fprintf(SMW,['SOUR:POW ' num2str(P_Instr(kP))]); query(SMW,'*OPC?');
+        fprintf(['Power' num2str(P_Instr(kP)) '\n']);
+        pause(t_delay);
+
+        DC_VI_Pin(k_Meas,kP,:) = Record_PS_VI_Return_STMPD(0,PowSup1,PowSup2); % Measure DC value at each Pin.
+        
+        if 1 % Read temp ADC for each Pin value
+            x.spi_adc_capture(chipID); x.spi_adc_capture(chipID);
+            [~,readdata] = dev.get_adc_val(x);
+            data_temp_Pin(k_Meas,kP) = readdata(1);
+        end
+
+        fprintf(PowMtr,':INIT:IMM;*WAI'); query(PowMtr,'*OPC?');
+        Pmtr(k_Meas,kP) = str2double(query(PowMtr,'FETC?'));
+        Pmtr(k_Meas,kP)
+        
+        if kP == 1 && P_Instr(kP) < -20
+            fprintf(PowMtr,'INIT:CONT ON');
+            pause(t_kP1_pause);
+            fprintf(PowMtr,'INIT:CONT OFF');
+            fprintf(PowMtr,':INIT:IMM;*WAI'); query(PowMtr,'*OPC?');
+            Pmtr(k_Meas,kP) = str2double(query(PowMtr,'FETC?'));
+        end
+
+        VDD_Target = [4 1.8 1 1.8 1.8 1.3];
+        if 1 % Check the power supplies
+            DC_VI = Record_PS_VI_Return_STMPD(0,PowSup1,PowSup2);
+            if max(abs(VDD_Target - DC_VI(1:6))) > 0.005
+                fprintf('Check the power supplies.\n');
+                beep; keyboard;
+            end
+        end
+    end
+
+    % Calculate gain and Pout
+    Pout(k_Meas,:) = Pmtr(k_Meas,:) - snp_PCB_Ch(idx_Loss_PCB_f,4,k_ch,k_pol)' - S21(idx_Loss_10dB_f,2);
+    Gain(k_Meas,:) = Pout(k_Meas,:) - Pin';
+    
+    % Calculate OP1dB
+    y = squeeze(Gain(k_Meas,:));
+    [y_max,idx_max] = max(y,[],'omitnan');
+    Gain_OP1dB(k_Meas,1) = mean(y(2:3),'omitnan');%mean(y(1:2),'omitnan'); Changed this line because bias codes are not optimised yet and the first value of Gain(i.e Gain at P_Instr -30dB) was 4 dB higher than the gain at second value(P_Instr -20 dB).
+    if idx_max == length(y) % No peak
+        Gain_OP1dB(k_Meas,2) = NaN;
+    else
+        try
+            Gain_OP1dB(k_Meas,2) = interp1(y(idx_max:end),Pout(k_Meas,idx_max:end),Gain_OP1dB(k_Meas,1)-1,'linear');
+        catch
+            beep; keyboard;
+        end
+    end
+    if plot_gain_vs_Pout
+        figure;
+        plot(Pout(k_Meas,:),Gain(k_Meas,:),'.-'); xlabel('Pout (dBm)'); ylabel('Gain (dB)'); title([num2str(freq) 'GHz']); grid on;
+    end
+    
+    % Prepare Pmtr for next measurement
+   
+     fprintf(SMW,['SOUR:POW ' num2str(P_Instr(1))]); query(SMW,'*OPC?');
+    fprintf(PowMtr,':INIT:IMM');
+   
+    if 1 % Finding the input power for the corresponding OP1dB value. 
+        P_Instr_OP1dB = interp1(squeeze(Pout(k_Meas,:)),P_Instr,Gain_OP1dB(k_Meas,2)); % P_Instr at OP1dB when H3 -> Power meter.   
+    end
+end
+
+% Input Power at OP1dB
+meas_runtime = toc(timerVal);
+
+save(outputFile,'mem_dump','DC_VI_Pin','data_temp_reset','data_temp_Pin','bias_FE','bias_IO','bias_fe_ctat','bias_fe_cbias','dist_bias_code_ctat','dist_cbias_manual','extra_bias_code_manual','fe_atten_code','fe_phase_code','common_atten_code','temp_offset_slope','temp_en_core_bandgap','PD_FE_en_global','PD_FE_gains','PD_Bm_en_global','PD_Bm_gains','clk_div','PD_Test_en_global','version_ID','UID','c_fe_captune','c_dist_captune','host_ip_txt','freq','host_ip_txt','meas_runtime','data_temp_RFoff','c_fe_captune_1ch1pol','clk_spi','t_delay','PD_FE_en','PD_Bm_en','adcEn','Pin','Pout','Gain','Pmtr','Gain_OP1dB','P_Instr_OP1dB','P_Instr','enabled_chan_pol','enabled_beam');
+  
+% Power down
+fprintf(PowMtr,'INIT:CONT ON');
+PowMtr.Timeout = 10;
+fprintf(SMW,'OUTP OFF');
+fprintf(SMW,['SOUR:POW ' num2str(-60)]);
+x.spi_reset;
+if Power_down
+    Pdown_PowSup_ES2_OSP;
+end
+fprintf('The measurement is done.\n');

@@ -1,0 +1,26 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# 측정/덤프 산출물
+*.csv
+logs/
+out/
+# 단, VNA로 측정한 경로손실 cal 테이블은 추적한다(loss.py가 읽음).
+!Loss_data/*.csv
+# 단, 레지스터 골든 픽스처는 추적한다(tests/test_bringup_golden.py 가 읽음).
+!tests/data/*.csv
+
+# understand-anything 도구 캐시(로컬 산출물)
+.understand-anything/
+
+# OS / 에디터
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

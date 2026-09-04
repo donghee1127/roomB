@@ -1,0 +1,24 @@
+[project]
+name = "cloudchaser"
+version = "0.1.0"
+description = "CloudChaser Stampede(TX) EVB bring-up + instrument setup (measurement-ready)"
+requires-python = ">=3.13"
+dependencies = [
+    # 보드 제어 API. vendor/ 의 wheel 로 설치한다 (오프라인):
+    #   pip install vendor/sivers_unified_api-0.1.0-py3-none-any.whl
+    "sivers-unified-api>=0.1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

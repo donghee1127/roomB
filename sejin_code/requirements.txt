@@ -1,0 +1,6 @@
+# 계측기 레이어는 표준 라이브러리 socket만 사용 → 별도 의존성 없음.
+# 보드 제어 API는 vendor/ 의 wheel 로 설치한다 (두 PC 공통):
+#   pip install vendor/sivers_unified_api-0.1.0-py3-none-any.whl
+#
+# 개발용(테스트):
+pytest>=8.0

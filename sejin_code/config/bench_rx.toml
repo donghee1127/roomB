@@ -1,0 +1,212 @@
+# =====================================================================
+# Bench config -- CloudChaser Blueway1721 (RX) EVB
+# Same physical PSU wiring as TX (same IPs / channel numbers).
+# Only voltage targets and current limits change for the Blueway chip.
+#
+# Blueway1721 datasheet (Rev 1.3) power supply rails:
+#   VDD_FE1   : 1.0V  LNA St1                 -> PSU1 CH1 (FE1_1V0)
+#   VDD_DIG   : 1.0V  Digital SPI             -> PSU1 CH2 (DIG_1V0)
+#   VDD_1p8IO : 1.3V  IO (EVB design issue;   -> PSU1 CH3 (IO_1V3)
+#                     chip spec = 1.8V)
+#   VDD_1p8ANA: 1.8V  Analog (ADC/bandgap/PD) -> PSU2 CH1 (ANA_1V8)
+#   VDD_FE2   : 1.0V  LNA St2                 -> PSU2 CH2 (FE2_1V0)
+#   VDD_FE3   : 1.5V  Splitter + combiners    -> PSU2 CH3 (FE3_1V5)
+#
+# NOTE: EVB silk labels (FE1/FE2/FE3) do NOT track chip net names, and the
+#   config-name<->connector mapping is swapped on TX too -- the physical
+#   PSU->connector cabling is the ground truth. Confirmed at bench:
+#     PSU2 CH2 -> EVB "FE2" connector = VDD_FE2 (1.0V)
+#     PSU2 CH3 -> EVB "FE3" connector = VDD_FE3 (1.5V)
+#   Driving CH2 at 1.5V exceeds VDD_FE2 abs max (1.1V, datasheet Table 3)
+#   -> chip damage. CH2 must stay at 1.0V.
+#
+# i_limit safety values (datasheet Table 4, simulated max; per-rail totals):
+#   1.0V total (FE1+FE2+DIG) max 450 mA -> FE1/FE2: 350 mA each (LNA), DIG: 150 mA
+#   1.5V total (FE3+DIST)    max 250 mA -> FE3 channel carries both: 250 mA
+#   1.8V total (ANA+IO)      max  50 mA -> each 30 mA (IO uses 1.3V on EVB)
+#
+# Power-up sequence (datasheet section 6.3 "Power Supply Sequencing"):
+#   1. VDD_DIG  -> 1.0V first  (SPI not yet active)
+#   2. VDD_IO   -> 1.3V        (chip responds to SPI after this)
+#   3. VDD_ANA  -> 1.8V
+#   4. VDD_FE1  -> 1.0V        (1st-stage LNA)
+#   5. VDD_FE2  -> 1.0V        (2nd-stage LNA)
+#   6. VDD_FE3  -> 1.5V        (splitter + combiners)
+# =====================================================================
+
+[ramp]
+step_v   = 0.2      # ramp step voltage [V]
+settle_s = 0.1      # settle wait between steps [s]
+
+power_up_order = ["DIG_1V0", "IO_1V3", "ANA_1V8", "FE1_1V0", "FE2_1V0", "FE3_1V5"]
+
+# 파워다운 계단식 강하 plateau (내림차순, 데이터시트 Blueway 6.3):
+#   ① 1.8V 레일 1.8V->1.5V  ② FE3/DIST/ANA/IO 1.5V->1V  ③ 전체(FE1/VDD_DIG 포함) 1V->0V.
+# 각 plateau 에서 현재 전압이 그보다 높은 레일만 함께 내린다(_set_v 기준).
+# 주의: IO 는 EVB 이슈로 1.3V 인가 -> 첫 plateau(1.5)보다 낮아 자동 제외, 1V 부터 하강.
+power_down_stages = [1.5, 1.0, 0.0]
+
+# ---------------------------------------------------------------------
+# PSU1 -- Keysight E36313A @ 192.168.5.18  (same as TX)
+# ---------------------------------------------------------------------
+[psu1]
+model = "Keysight E36313A"
+host  = "192.168.5.18"
+port  = 5025
+
+trip_poll = false   # STAT:QUES:COND? 무응답 장비 -- 근거는 bench.toml [psu1] 주석 참조
+
+[[psu1.rails]]
+ch = 1
+name = "FE1_1V0"
+v_target = 1.0
+i_limit  = 0.35    # VDD_FE1 LNA St1: part of 1.0V rail (max 450 mA for FE1+FE2+DIG)
+ovp      = 1.15
+
+[[psu1.rails]]
+ch = 2
+name = "DIG_1V0"
+v_target = 1.0
+i_limit  = 0.15    # VDD_DIG: small digital SPI logic
+ovp      = 1.15
+detect   = true    # SPI-only rail (1.3V on both TX & RX) -> powered first for chip auto-detect
+
+[[psu1.rails]]
+ch = 3
+name = "IO_1V3"
+v_target = 1.3
+i_limit  = 0.10    # VDD_1p8V_IO: 1.3V on EVB (chip spec 1.8V, EVB design issue)
+ovp      = 1.55
+detect   = true    # SPI-only rail (1.3V on both TX & RX) -> powered first for chip auto-detect
+
+# ---------------------------------------------------------------------
+# PSU2 -- Keysight E36313A @ 192.168.5.19  (same as TX)
+# ---------------------------------------------------------------------
+[psu2]
+model = "Keysight E36313A"
+host  = "192.168.5.19"
+port  = 5025
+
+trip_poll = false   # 위 psu1 주석 참조
+
+[[psu2.rails]]
+ch = 1
+name = "ANA_1V8"
+v_target = 1.8
+i_limit  = 0.10    # VDD_1p8V_ANA: analog (ADC, bandgap, power detectors, LDOs)
+ovp      = 2.0
+detect   = true    # SPI-domain rail (1.8V on both TX & RX) -> powered first for chip auto-detect
+
+[[psu2.rails]]
+ch = 2
+name = "FE2_1V0"
+v_target = 1.0
+i_limit  = 0.35    # VDD_FE2: 1.0V 2nd-stage LNA (St2); part of 1.0V rail max 450 mA
+ovp      = 1.15    # abs max 1.1V (datasheet Table 3) -- keep below 1.5V at all times
+
+[[psu2.rails]]
+ch = 3
+name = "FE3_1V5"
+v_target = 1.5
+i_limit  = 0.25    # VDD_FE3 + VDD_1p5V_DIST: 1.5V splitter+combiners (rail max 250 mA)
+ovp      = 1.65
+
+# ---------------------------------------------------------------------
+# SG -- R&S SMW200A @ 192.168.5.14  (same instrument as TX)
+# Blueway receive band: 17.7 -- 21.2 GHz (Ka-band Satcom)
+# ---------------------------------------------------------------------
+[sg]
+model     = "R&S SMW200A"
+host      = "192.168.5.14"
+port      = 5025
+freq_hz   = 19.5e9    # mid-band default; adjust per measurement
+level_dbm = -30.0     # safe low level for bring-up
+rf_output = false     # RF OFF until measurement ready
+
+# ---------------------------------------------------------------------
+# SA -- R&S FSVA3030 @ 192.168.5.12  (same instrument as TX)
+# SA connects to beam port (RX output side)
+# ---------------------------------------------------------------------
+[sa]
+model          = "R&S FSVA3030"
+host           = "192.168.5.12"
+port           = 5025
+spectrum_mode  = true
+center_hz      = 19.5e9
+span_hz        = 100.0e6
+rbw_hz         = 1.0e6
+ref_level_dbm  = 0.0
+input_atten_db = 10.0
+
+# ---------------------------------------------------------------------
+# VNA -- Anritsu MS4644B VectorStar (phase_index_accuracy 전용, 옵션 장비)
+# 측정 전 VNA 캘리브레이션은 사용자가 수동으로 해 둔다 -- 코드는 preset 안 함.
+# connect_all 대상이 아니므로 VNA 가 없어도 다른 측정은 그대로 동작한다.
+# ---------------------------------------------------------------------
+[vna]
+model   = "Anritsu MS4644B"
+host    = "192.168.5.15"   # TODO: 실제 VNA IP 로 수정
+port    = 5001             # Anritsu raw-socket SCPI 포트(5025 아님) -- 계기에서 확인
+timeout = 10.0
+
+# ---------------------------------------------------------------------
+# Board (Blueway RX) bring-up config
+# RX signal flow: SG -> channel port (antenna input) -> chip -> beam port -> SA
+# ---------------------------------------------------------------------
+[board]
+chip_id         = 0
+beam            = "b0"
+active_channels = ["h1"]    # H1 healthy channel (H0/H2 HW defect same as TX EVB)
+# NOTE: bring_up_rx's raw sequence no longer writes cal_freq_code / common_gain
+# (spec chapter 4's RX table has no such step and evb_full doesn't set them either) --
+# a non-zero value here only makes bring-up log it as "ignored". To change RX gain,
+# use gain()/atten() after bring-up instead (gain_target="fe" is DEAD on this chip too --
+# beamtable/atten() is the one that works).
+cal_freq_code   = 0x0
+common_gain     = 0x20      # b{n}_common_gain: 0=max gain, 0x3f=max atten -- IGNORED on RX (see NOTE above)
+
+# DIST 스플리터 split 모드 -- **TX 전용. RX 경로에서는 완전히 무시된다.**
+# bring_up_rx 는 cfg.split_mode 를 아예 읽지 않는다(스펙 4장 RX 표에 split 단계가
+# 없고 evb_full 의 bring_up_rx 도 안 쓴다). 여기 값을 바꿔도 RX 레지스터는 안 바뀐다 --
+# TX 와 키를 맞춰 두려고 남겨 둔 자리다.
+split_mode = true
+
+# v4 시트의 최적화 bias 적용 여부.
+#   true  = RX NF_OPTIM 값(FE PTAT 34/24/48, DIST St1 44)을 활성 채널/빔에 명시 기입
+#   false = die eFuse 리드백 값 그대로
+# RX 는 TX 와 달리 이 스위치가 FE 와 DIST 를 둘 다 되돌린다 -- DIRECT_REGS_RX
+# (0x1004/0x1058/0x1059/0x1068)에 DIST bias 주소(0x104C~)가 없기 때문이다.
+# (TX 쪽 bench.toml 의 같은 키에는 이 대칭이 성립하지 않는다. 거기 주석 참고.)
+# 적용 전/후 gain·NF·Pdc 델타를 비교하려면 이 값만 바꿔 두 번 측정한다.
+optimized_bias = true
+
+# 0x104D[5:0] = DIST_B0_St2_1_PTAT (CH2-3용).
+# **RX 경로에서는 무시된다** -- apply_dist_bias(kind="rx") 는 st2_1_ptat 인자를
+# 쓰지 않는다(NF_OPTIM 시트에 해당 값이 없다). TX(bench.toml)에서만 의미가 있다.
+dist_st2_1_ptat = 13
+
+# 벤더 드라이버의 load_efuse() 실행 여부.
+#   false = evb_full.py 와 동일 (spi.reset() 만). 기본값.
+#   true  = chip.init() 호출 -> 레지스터 맵의 EFUSE_INSTRUCTIONS 스크립트 실행.
+# **이 스위치로는 "bias 트림이 안 올라왔나"를 A/B 할 수 없다.** EFUSE_INSTRUCTIONS 는
+# 0x1055 / 0x1058 / 0x1059 / 0x1068-0x106B 만 만지는데 bring-up 이 그 전부를 뒤에서
+# 덮는다. 즉 true 로 켜도 최종 레지스터에 남는 차이는 0x1055 의 daisy_chain3_bias 가
+# 지워진다는 것뿐이다. 트림 확인 방법은 docs/SESSION.md 참고(bring-up 전에 읽어 남긴다).
+run_efuse_init = false
+
+# RX 채널 레벨 = FE 감쇠 ch{i}_{pol}_fe_attn (4-bit, 8 dB/bit). 0 = 무감쇠 = 최대 게인.
+# (Blueway 엔 Stampede 의 gain_control_* 가 없다.)
+# NOTE: bring_up_rx's raw sequence no longer writes ch_fe_attn or ch_atten (spec
+# chapter 4's RX table has no such step) -- non-empty values only make bring-up log
+# them as "ignored". Use gain()/atten() after bring-up to change RX gain instead.
+[board.ch_fe_attn]
+h0 = 0x0
+h1 = 0x0
+h2 = 0x0
+h3 = 0x0
+
+[board.ch_atten]
+h0 = 0x00
+h1 = 0x00
+h2 = 0x00
+h3 = 0x00

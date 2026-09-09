@@ -342,6 +342,24 @@ def build_common_tx_sequence():
     ]
 
 
+def apply_beamforming():
+    """TX_EN을 재토글하지 않고, 현재 beamforming_config의 gain/phase만 다시 적용한다.
+    이미 tx_on()으로 TX가 켜져 있는 상태에서 빔 방향만 빠르게/끊김없이 바꿀 때 사용."""
+    print("\n=== Applying Individual Gain & Phase Settings ===")
+    for cs in TARGET_CS_PINS:
+        if cs in beamforming_config:
+            print(f"-> Configuring Chip CS{cs}")
+            for ch in range(1, 5):
+                ch_data = beamforming_config[cs][ch]
+                idx = ch - 1
+                send_command(cs, REG_GAIN[idx], ch_data['gain'])
+                send_command(cs, REG_PHASE_I[idx], ch_data['i'])
+                send_command(cs, REG_PHASE_Q[idx], ch_data['q'])
+
+            send_command(cs, 0x028, 0x02)
+            print(f"   [CS{cs}] Gain & Phase applied & Loaded.")
+
+
 def tx_on():
     print("\n========== [2/3] TX ON ==========")
 
@@ -356,19 +374,7 @@ def tx_on():
         print(f"\n=== Common Tx Setup for CS{cs} ===")
         send_sequence(cs, common_tx_sequence)
 
-    print("\n=== Applying Individual Gain & Phase Settings ===")
-    for cs in TARGET_CS_PINS:
-        if cs in beamforming_config:
-            print(f"-> Configuring Chip CS{cs}")
-            for ch in range(1, 5):
-                ch_data = beamforming_config[cs][ch]
-                idx = ch - 1
-                send_command(cs, REG_GAIN[idx], ch_data['gain'])
-                send_command(cs, REG_PHASE_I[idx], ch_data['i'])
-                send_command(cs, REG_PHASE_Q[idx], ch_data['q'])
-
-            send_command(cs, 0x028, 0x02)
-            print(f"   [CS{cs}] Gain & Phase applied & Loaded.")
+    apply_beamforming()
 
     print(f"\nTarget {TARGET_CS_PINS} successfully activated for measurement.")
 

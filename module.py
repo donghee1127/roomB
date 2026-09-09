@@ -342,13 +342,15 @@ def build_common_tx_sequence():
     ]
 
 
-def apply_beamforming():
+def apply_beamforming(verbose=True):
     """TX_EN을 재토글하지 않고, 현재 beamforming_config의 gain/phase만 다시 적용한다.
     이미 tx_on()으로 TX가 켜져 있는 상태에서 빔 방향만 빠르게/끊김없이 바꿀 때 사용."""
-    print("\n=== Applying Individual Gain & Phase Settings ===")
+    if verbose:
+        print("\n=== Applying Individual Gain & Phase Settings ===")
     for cs in TARGET_CS_PINS:
         if cs in beamforming_config:
-            print(f"-> Configuring Chip CS{cs}")
+            if verbose:
+                print(f"-> Configuring Chip CS{cs}")
             for ch in range(1, 5):
                 ch_data = beamforming_config[cs][ch]
                 idx = ch - 1
@@ -357,26 +359,32 @@ def apply_beamforming():
                 send_command(cs, REG_PHASE_Q[idx], ch_data['q'])
 
             send_command(cs, 0x028, 0x02)
-            print(f"   [CS{cs}] Gain & Phase applied & Loaded.")
+            if verbose:
+                print(f"   [CS{cs}] Gain & Phase applied & Loaded.")
 
 
-def tx_on():
-    print("\n========== [2/3] TX ON ==========")
+def tx_on(verbose=True):
+    if verbose:
+        print("\n========== [2/3] TX ON ==========")
+        print("\n=== Auto-Reset: Forcing all chips to Safe Standby ===")
 
-    print("\n=== Auto-Reset: Forcing all chips to Safe Standby ===")
     for cs in ALL_CS_PINS:
         send_sequence(cs, SAFE_STANDBY_SEQUENCE)
-    print("All chips are now locked in Pinch-off state.")
+
+    if verbose:
+        print("All chips are now locked in Pinch-off state.")
     time.sleep(0.1)
 
     common_tx_sequence = build_common_tx_sequence()
     for cs in TARGET_CS_PINS:
-        print(f"\n=== Common Tx Setup for CS{cs} ===")
+        if verbose:
+            print(f"\n=== Common Tx Setup for CS{cs} ===")
         send_sequence(cs, common_tx_sequence)
 
-    apply_beamforming()
+    apply_beamforming(verbose=verbose)
 
-    print(f"\nTarget {TARGET_CS_PINS} successfully activated for measurement.")
+    if verbose:
+        print(f"\nTarget {TARGET_CS_PINS} successfully activated for measurement.")
 
 
 # ==========================================================================

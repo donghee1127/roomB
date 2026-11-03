@@ -211,12 +211,20 @@ class DutLink:
         self.client = paramiko.SSHClient()
         self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         try:
-            self.client.connect(self.host, username=self.user, password=self.password, timeout=10)
+            try:
+                self.client.connect(self.host, username=self.user, password=self.password, timeout=10)
+            except paramiko.SSHException:
+                # SSH 키가 없으면 AuthenticationException 이 아니라
+                # "No authentication methods available"(SSHException) 이 난다 -> 비밀번호 입력
+                if self.password is not None:
+                    raise
+                self.password = getpass.getpass(f"{self.user}@{self.host} password: ")
+                self.client.connect(self.host, username=self.user, password=self.password,
+                                    timeout=10, look_for_keys=False, allow_agent=False)
         except paramiko.AuthenticationException:
-            if self.password is not None:
-                raise
-            self.password = getpass.getpass(f"{self.user}@{self.host} password: ")
-            self.client.connect(self.host, username=self.user, password=self.password, timeout=10)
+            raise DutError("SSH 로그인 실패 (비밀번호 확인)")
+        except (paramiko.SSHException, OSError) as e:
+            raise DutError(f"SSH 연결 실패: {e} (파이 전원/Wi-Fi keti_mcu 연결/IP 확인)")
         self.client.get_transport().set_keepalive(5)
 
     def upload(self):
@@ -412,7 +420,7 @@ def main():
         dut.close()
 
         if pos_opened:
-            if POS_RETURN_ZERO:
+            if POS_RETURN_ZERO and not args.no_pos:
                 try:
                     pos.move(POS_AXIS, 0)
                     pos.wait_arrival(POS_AXIS, 0, POS_TOL_DEG, POS_MOVE_TIMEOUT_S)

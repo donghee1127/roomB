@@ -7,9 +7,10 @@ beam_sync_main.py - 빔포밍 DUT + 포지셔너(TC-5594A) 동기 제어 (노트
 
 동기화 방식 (lock-step handshake)
   매 스텝마다
-    1) DUT 에 BEAM <idx> 전송 -> 적용 완료 응답(@@ OK) 수신
-    2) 포지셔너 이동 명령 -> 현재각을 폴링해서 목표각 도착 확인
-    3) 도착 시점부터 DWELL_S 초 대기
+    1) 포지셔너 이동 명령 -> 현재각을 폴링해서 목표각 도착 확인
+    2) 도착 후 BEAM_DELAY_S 초 대기
+    3) DUT 에 BEAM <idx> 전송 -> 적용 완료 응답(@@ OK) 수신
+    4) 빔 인가 시점부터 DWELL_S 초 대기
   다음 스텝은 앞 단계가 '완료 확인'된 뒤에만 시작하므로 두 장비가 타이머로
   따로 돌 때 생기는 누적 시간 오차(drift)가 원리적으로 생기지 않는다.
 
@@ -47,7 +48,8 @@ STEPS = [
     (0, 0),
     (-10, -10),
 ]
-DWELL_S = 5.0          # 포지셔너 도착 후 대기 시간 (초)
+BEAM_DELAY_S = 1.0     # 포지셔너 도착 후 빔 인가까지 대기 시간 (초)
+DWELL_S = 5.0          # 빔 인가 후 대기 시간 (초)
 
 # --- DUT (라즈베리파이) ---
 DUT_HOST = "10.94.24.10"
@@ -316,7 +318,8 @@ class NullDut:
 def parse_args():
     p = argparse.ArgumentParser(description="Beamforming DUT + positioner synchronized control")
     p.add_argument("--cycles", type=int, default=0, help="반복 횟수 (0 = Ctrl+C 까지 무한)")
-    p.add_argument("--dwell", type=float, default=DWELL_S, help="도착 후 대기 시간(초)")
+    p.add_argument("--beam-delay", type=float, default=BEAM_DELAY_S, help="포지셔너 도착 후 빔 인가까지 대기(초)")
+    p.add_argument("--dwell", type=float, default=DWELL_S, help="빔 인가 후 대기 시간(초)")
     p.add_argument("--no-dut", action="store_true", help="DUT 없이 포지셔너만")
     p.add_argument("--no-pos", action="store_true", help="포지셔너 없이 DUT만")
     p.add_argument("--com", default=POS_COM, help="포지셔너 시리얼 포트 (default: %(default)s)")
@@ -373,39 +376,42 @@ def main():
         log(f"[DUT] init done. beam table: "
             + ", ".join(f"#{i}={a:+g}" for i, a in enumerate(beam_angles)))
 
-        log(f"시퀀스 {STEPS} / dwell {args.dwell:g}s / "
+        log(f"시퀀스 {STEPS} / beam delay {args.beam_delay:g}s / dwell {args.dwell:g}s / "
             + (f"{args.cycles}회 반복" if args.cycles else "무한 반복 (Ctrl+C 정지)"))
 
         with open(csv_path, "w", newline="", encoding="utf-8-sig") as f:
             writer = csv.writer(f)
             writer.writerow(["cycle", "step", "beam_deg", "beam_idx", "pos_target_deg",
-                             "pos_actual_deg", "t_beam_ack", "t_pos_arrived", "t_dwell_end"])
+                             "pos_actual_deg", "t_pos_arrived", "t_beam_ack", "t_dwell_end"])
             cycle = 0
             while args.cycles == 0 or cycle < args.cycles:
                 cycle += 1
                 for step, (beam_deg, pos_deg) in enumerate(STEPS):
                     idx = beam_idx[beam_deg]
 
-                    # 1) 빔 인가 -> 응답 확인
-                    dut.request(f"BEAM {idx}")
-                    t_beam = datetime.now()
-                    log(f"[{cycle}-{step}] beam #{idx} ({beam_deg:+g} deg) applied")
-
-                    # 2) 포지셔너 이동 -> 도착 확인
+                    # 1) 포지셔너 이동 -> 도착 확인
                     pos.move(POS_AXIS, pos_deg)
                     actual = pos.wait_arrival(POS_AXIS, pos_deg, POS_TOL_DEG,
                                               POS_MOVE_TIMEOUT_S, idle=dut.keepalive)
                     t_pos = datetime.now()
                     log(f"[{cycle}-{step}] positioner {POS_AXIS} {pos_deg:+g} deg arrived "
-                        f"(actual {actual:+.2f}), dwell {args.dwell:g}s")
+                        f"(actual {actual:+.2f}), beam in {args.beam_delay:g}s")
 
-                    # 3) 대기
+                    # 2) 도착 후 대기
+                    sleep_with_keepalive(args.beam_delay, dut)
+
+                    # 3) 빔 인가 -> 응답 확인
+                    dut.request(f"BEAM {idx}")
+                    t_beam = datetime.now()
+                    log(f"[{cycle}-{step}] beam #{idx} ({beam_deg:+g} deg) applied, dwell {args.dwell:g}s")
+
+                    # 4) 대기
                     sleep_with_keepalive(args.dwell, dut)
                     t_end = datetime.now()
 
                     writer.writerow([cycle, step, beam_deg, idx, pos_deg, f"{actual:.2f}",
-                                     t_beam.isoformat(timespec="milliseconds"),
                                      t_pos.isoformat(timespec="milliseconds"),
+                                     t_beam.isoformat(timespec="milliseconds"),
                                      t_end.isoformat(timespec="milliseconds")])
                     f.flush()
         log("설정된 반복 완료.")

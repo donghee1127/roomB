@@ -6,6 +6,8 @@ beam_sync_agent.py - DUT(라즈베리파이)에서 실행되는 빔 제어 에�
 module.py 와 함께 ~/beam_sync/ 에 업로드한 뒤 자동으로 실행한다.
 
 프로토콜 (한 줄 = 한 명령, 응답은 반드시 '@@ ' 로 시작하는 한 줄)
+    CAL <cs:ch:i:q,...>                   boresight(0도) 캘리브레이션 I/Q 지정 (INIT 전에)
+                                          -> @@ OK CAL <채널 수>
     INIT <bias> <gain> <deg0,deg1,...>   전원 ON + 칩 초기화 + 빔 테이블 미리 계산
                                           -> @@ OK INIT <빔 개수>
     BEAM <idx>                            미리 계산된 빔 idx 적용 (첫 BEAM 때 TX ON)
@@ -72,6 +74,28 @@ class Agent:
         self.powered = False
         self.tx = False
 
+    def cmd_cal(self, args):
+        """module.BORESIGHT_CONFIG 를 전달받은 캘리브레이션 값으로 교체한다.
+        compute_beamforming_config() 가 이 값을 0도 기준으로 틸트 위상을 더한다."""
+        if self.powered:
+            raise RuntimeError("CAL must be sent before INIT")
+        new = {}
+        for item in args[0].split(","):
+            cs, ch, i, q = item.split(":")
+            cs, ch, i, q = int(cs), int(ch), int(i, 0), int(q, 0)
+            m.phase_of(i, q)  # ADAR1000 위상 테이블에 없는 값이면 KeyError
+            new.setdefault(cs, {})[ch] = {'gain': 0, 'i': i, 'q': q}
+        expected = {(cs, ch) for cs, chs in m.BORESIGHT_CONFIG.items() for ch in chs}
+        got = {(cs, ch) for cs, chs in new.items() for ch in chs}
+        if got != expected:
+            raise ValueError(f"channel set mismatch: missing {sorted(expected - got)}")
+        m.BORESIGHT_CONFIG = new
+        for cs in sorted(new):
+            info(f"[agent] CAL CS{cs}: " + " ".join(
+                f"CH{ch}=({d['i']:#04x},{d['q']:#04x}) {m.phase_of(d['i'], d['q']):.2f}deg"
+                for ch, d in sorted(new[cs].items())))
+        return f"CAL {len(got)}"
+
     def cmd_init(self, args):
         bias = int(args[0], 0)
         gain = int(args[1], 0)
@@ -119,7 +143,7 @@ def main():
     args = parser.parse_args()
 
     agent = Agent()
-    handlers = {"INIT": agent.cmd_init, "BEAM": agent.cmd_beam, "OFF": agent.cmd_off}
+    handlers = {"CAL": agent.cmd_cal, "INIT": agent.cmd_init, "BEAM": agent.cmd_beam, "OFF": agent.cmd_off}
     reader = LineReader(sys.stdin.fileno())
 
     reply("READY")

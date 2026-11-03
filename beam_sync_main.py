@@ -23,6 +23,7 @@ beam_sync_main.py - 빔포밍 DUT + 포지셔너(TC-5594A) 동기 제어 (노트
   python beam_sync_main.py --com COM5      # 포지셔너 시리얼 포트 지정
 """
 import argparse
+import ast
 import csv
 import getpass
 import os
@@ -64,6 +65,11 @@ AGENT_WATCHDOG_S = 60  # 이 시간 동안 노트북 명령이 없으면 DUT가 
 # (beam_tilt_demo.py 에서는 +-20도가 반대로 나와서 {20: -20, -20: 20} 을 사용했었음.
 #  +-10/+-30 도 측정해보고 반대로 나오면 여기에 추가)
 HW_ANGLE_OVERRIDE = {}
+
+# boresight(0도) 위상 캘리브레이션: ncr2.py 의 BOARD_CALIBRATIONS[CAL_SAMPLE] 를 읽어서
+# 이 값을 기준으로 각 빔 틸트의 phase index 를 다시 계산한다 (phase_cal 로 갱신되면 자동 반영)
+CAL_SAMPLE = 1
+NCR2_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ncr2.py")
 
 # --- 포지셔너 TC-5594A ---
 POS_TRANSPORT = "serial"   # "tcp" 또는 "serial"
@@ -326,6 +332,27 @@ def parse_args():
     return p.parse_args()
 
 
+def load_boresight_cal(path, sample):
+    """ncr2.py 를 import 하지 않고(RPi.GPIO 필요) BOARD_CALIBRATIONS 리터럴만 읽는다."""
+    with open(path, encoding="utf-8") as f:
+        tree = ast.parse(f.read())
+    for node in tree.body:
+        if (isinstance(node, ast.Assign) and len(node.targets) == 1
+                and getattr(node.targets[0], "id", None) == "BOARD_CALIBRATIONS"):
+            cals = ast.literal_eval(node.value)
+            break
+    else:
+        raise ValueError(f"BOARD_CALIBRATIONS not found in {path}")
+    if sample not in cals:
+        raise ValueError(f"sample #{sample} not in {path} (있는 샘플: {sorted(cals)})")
+    cal = cals[sample]
+    missing = [(cs, ch) for cs in (8, 2, 5, 6) for ch in (1, 2, 3, 4)
+               if ch not in cal.get(cs, {})]
+    if missing:
+        raise ValueError(f"sample #{sample} 에 빠진 채널: {missing}")
+    return cal
+
+
 def sleep_with_keepalive(seconds, dut):
     end = time.monotonic() + seconds
     while True:
@@ -345,6 +372,11 @@ def main():
             beam_angles.append(beam_deg)
     beam_idx = {deg: i for i, deg in enumerate(beam_angles)}
     hw_angles = [HW_ANGLE_OVERRIDE.get(a, a) for a in beam_angles]
+
+    cal = load_boresight_cal(NCR2_PATH, CAL_SAMPLE)
+    cal_arg = ",".join(f"{cs}:{ch}:0x{cal[cs][ch]['i']:02X}:0x{cal[cs][ch]['q']:02X}"
+                       for cs in sorted(cal) for ch in sorted(cal[cs]))
+    log(f"[CAL] boresight calibration: {os.path.basename(NCR2_PATH)} sample #{CAL_SAMPLE}")
 
     os.makedirs(LOG_DIR, exist_ok=True)
     csv_path = os.path.join(LOG_DIR, f"beam_sync_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv")
@@ -370,6 +402,7 @@ def main():
         dut.upload()
         dut.start()
         dut_started = True
+        dut.request(f"CAL {cal_arg}")
         log(f"[DUT] agent ready. power on & init (bias=0x{BIAS_VAL:02X}, gain=0x{GAIN_VAL:02X}) ...")
         dut.request(f"INIT 0x{BIAS_VAL:02X} 0x{GAIN_VAL:02X} {','.join(f'{a:g}' for a in hw_angles)}",
                     timeout=120)

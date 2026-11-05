@@ -51,7 +51,7 @@ BEAM_DELAY_S = 1.0     # 포지셔너 도착 후 빔 인가까지 대기 시간 
 DWELL_S = 5.0          # 빔 인가 후 대기 시간 (초)
 
 # --- DUT (라즈베리파이) ---
-DUT_HOST = "10.94.24.10"
+DUT_HOST = "192.168.0.8"
 DUT_USER = "nsg"
 DUT_PASSWORD = None    # None 이면 실행 시 입력받음 (SSH 키가 설정돼 있으면 키 우선 사용)
 DUT_REMOTE_DIR = "beam_sync"   # 파이 홈 디렉토리 기준 업로드 폴더

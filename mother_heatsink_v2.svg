@@ -1,0 +1,187 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1580" height="555" viewBox="0 0 1580 555" font-family="Malgun Gothic, 맑은 고딕, sans-serif">
+<defs>
+<linearGradient id="ant" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbedc9"/><stop offset="1" stop-color="#efd59d"/></linearGradient>
+<linearGradient id="patch" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f3a35a"/><stop offset="1" stop-color="#d27630"/></linearGradient>
+<linearGradient id="bfic" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4c7fd6"/><stop offset="1" stop-color="#2a56a8"/></linearGradient>
+<linearGradient id="plug" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5a616c"/><stop offset="1" stop-color="#3a3f47"/></linearGradient>
+<linearGradient id="rcpt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6a717c"/><stop offset="1" stop-color="#454a53"/></linearGradient>
+<linearGradient id="pcbg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2f8a5a"/><stop offset="1" stop-color="#1d6a43"/></linearGradient>
+<linearGradient id="ind" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5a5f68"/><stop offset="1" stop-color="#33373e"/></linearGradient>
+<linearGradient id="cap" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#1e2a50"/><stop offset=".35" stop-color="#4a5d9a"/><stop offset="1" stop-color="#1e2a50"/></linearGradient>
+<linearGradient id="chip" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a3e45"/><stop offset="1" stop-color="#1c1e22"/></linearGradient>
+<linearGradient id="shield" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e6e9ed"/><stop offset="1" stop-color="#b3b9c1"/></linearGradient>
+<linearGradient id="alu" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d5dae0"/><stop offset="1" stop-color="#aab2bc"/></linearGradient>
+<linearGradient id="fin" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#b6bec8"/><stop offset=".4" stop-color="#e3e7ec"/><stop offset="1" stop-color="#a3acb7"/></linearGradient>
+<filter id="sh" x="-5%" y="-5%" width="110%" height="120%"><feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#0b1a2a" flood-opacity=".18"/></filter>
+</defs>
+<rect width="1580" height="555" fill="#ffffff"/>
+<g filter="url(#sh)">
+<rect x="120.0" y="354.0" width="1060.0" height="6.0" rx="0" fill="#9aa1aa" stroke="none" stroke-width="1" />
+<rect x="120.0" y="360.0" width="1060.0" height="30.0" rx="3" fill="url(#alu)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="120.0" y="389.0" width="14.0" height="105.0" rx="2" fill="url(#fin)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="160.2" y="389.0" width="14.0" height="105.0" rx="2" fill="url(#fin)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="200.5" y="389.0" width="14.0" height="105.0" rx="2" fill="url(#fin)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="240.7" y="389.0" width="14.0" height="105.0" rx="2" fill="url(#fin)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="280.9" y="389.0" width="14.0" height="105.0" rx="2" fill="url(#fin)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="321.2" y="389.0" width="14.0" height="105.0" rx="2" fill="url(#fin)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="361.4" y="389.0" width="14.0" height="105.0" rx="2" fill="url(#fin)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="401.6" y="389.0" width="14.0" height="105.0" rx="2" fill="url(#fin)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="441.8" y="389.0" width="14.0" height="105.0" rx="2" fill="url(#fin)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="482.1" y="389.0" width="14.0" height="105.0" rx="2" fill="url(#fin)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="522.3" y="389.0" width="14.0" height="105.0" rx="2" fill="url(#fin)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="562.5" y="389.0" width="14.0" height="105.0" rx="2" fill="url(#fin)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="602.8" y="389.0" width="14.0" height="105.0" rx="2" fill="url(#fin)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="643.0" y="389.0" width="14.0" height="105.0" rx="2" fill="url(#fin)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="683.2" y="389.0" width="14.0" height="105.0" rx="2" fill="url(#fin)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="723.5" y="389.0" width="14.0" height="105.0" rx="2" fill="url(#fin)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="763.7" y="389.0" width="14.0" height="105.0" rx="2" fill="url(#fin)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="803.9" y="389.0" width="14.0" height="105.0" rx="2" fill="url(#fin)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="844.2" y="389.0" width="14.0" height="105.0" rx="2" fill="url(#fin)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="884.4" y="389.0" width="14.0" height="105.0" rx="2" fill="url(#fin)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="924.6" y="389.0" width="14.0" height="105.0" rx="2" fill="url(#fin)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="964.8" y="389.0" width="14.0" height="105.0" rx="2" fill="url(#fin)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="1005.1" y="389.0" width="14.0" height="105.0" rx="2" fill="url(#fin)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="1045.3" y="389.0" width="14.0" height="105.0" rx="2" fill="url(#fin)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="1085.5" y="389.0" width="14.0" height="105.0" rx="2" fill="url(#fin)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="1125.8" y="389.0" width="14.0" height="105.0" rx="2" fill="url(#fin)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="1166.0" y="389.0" width="14.0" height="105.0" rx="2" fill="url(#fin)" stroke="#7d8693" stroke-width="1.2" />
+<rect x="130.0" y="284.0" width="1040.0" height="70.0" rx="4" fill="url(#pcbg)" stroke="#145233" stroke-width="1.5" />
+<line x1="136" y1="307.1" x2="1164" y2="307.1" stroke="#d6a04c" stroke-width="1.6" opacity=".55"/>
+<line x1="136" y1="330.2" x2="1164" y2="330.2" stroke="#d6a04c" stroke-width="1.6" opacity=".55"/>
+<text x="410.0" y="317.0" font-size="22" font-weight="800" fill="#ffffff" text-anchor="middle" >전원부</text>
+<text x="410.0" y="339.0" font-size="14" font-weight="600" fill="#d7f0df" text-anchor="middle" >Power</text>
+<line x1="520" y1="292" x2="520" y2="346" stroke="#ffffff" stroke-width="1.4" stroke-dasharray="5 5" opacity=".7"/>
+<text x="670.0" y="317.0" font-size="22" font-weight="800" fill="#ffffff" text-anchor="middle" >제어부</text>
+<text x="670.0" y="339.0" font-size="14" font-weight="600" fill="#d7f0df" text-anchor="middle" >Control</text>
+<line x1="820" y1="292" x2="820" y2="346" stroke="#ffffff" stroke-width="1.4" stroke-dasharray="5 5" opacity=".7"/>
+<text x="930.0" y="317.0" font-size="22" font-weight="800" fill="#ffffff" text-anchor="middle" >RF부</text>
+<text x="930.0" y="339.0" font-size="14" font-weight="600" fill="#d7f0df" text-anchor="middle" >RF</text>
+<rect x="318.0" y="250.0" width="44.0" height="34.0" rx="5" fill="url(#ind)" stroke="#22252a" stroke-width="1" />
+<ellipse cx="340" cy="267" rx="13" ry="9" fill="none" stroke="#7b818b" stroke-width="1.5"/>
+<rect x="372.0" y="250.0" width="44.0" height="34.0" rx="5" fill="url(#ind)" stroke="#22252a" stroke-width="1" />
+<ellipse cx="394" cy="267" rx="13" ry="9" fill="none" stroke="#7b818b" stroke-width="1.5"/>
+<rect x="430.0" y="238.0" width="28.0" height="46.0" rx="4" fill="url(#cap)" stroke="#1a2240" stroke-width="1" />
+<rect x="430.0" y="238.0" width="28.0" height="6.0" rx="3" fill="#c9ced6" stroke="#8d939c" stroke-width="0.8" />
+<rect x="466.0" y="238.0" width="28.0" height="46.0" rx="4" fill="url(#cap)" stroke="#1a2240" stroke-width="1" />
+<rect x="466.0" y="238.0" width="28.0" height="6.0" rx="3" fill="#c9ced6" stroke="#8d939c" stroke-width="0.8" />
+<rect x="500.0" y="275.0" width="12.0" height="9.0" rx="1" fill="#c9a46c" stroke="#8a6a3a" stroke-width="0.6" />
+<rect x="560.0" y="268.0" width="150.0" height="16.0" rx="2" fill="url(#chip)" stroke="#111" stroke-width="1" />
+<rect x="565.0" y="281.0" width="4.0" height="3.0" rx="0" fill="#c9ccd1" stroke="none" stroke-width="1" />
+<rect x="574.6" y="281.0" width="4.0" height="3.0" rx="0" fill="#c9ccd1" stroke="none" stroke-width="1" />
+<rect x="584.2" y="281.0" width="4.0" height="3.0" rx="0" fill="#c9ccd1" stroke="none" stroke-width="1" />
+<rect x="593.8" y="281.0" width="4.0" height="3.0" rx="0" fill="#c9ccd1" stroke="none" stroke-width="1" />
+<rect x="603.4" y="281.0" width="4.0" height="3.0" rx="0" fill="#c9ccd1" stroke="none" stroke-width="1" />
+<rect x="613.0" y="281.0" width="4.0" height="3.0" rx="0" fill="#c9ccd1" stroke="none" stroke-width="1" />
+<rect x="622.6" y="281.0" width="4.0" height="3.0" rx="0" fill="#c9ccd1" stroke="none" stroke-width="1" />
+<rect x="632.2" y="281.0" width="4.0" height="3.0" rx="0" fill="#c9ccd1" stroke="none" stroke-width="1" />
+<rect x="641.8" y="281.0" width="4.0" height="3.0" rx="0" fill="#c9ccd1" stroke="none" stroke-width="1" />
+<rect x="651.4" y="281.0" width="4.0" height="3.0" rx="0" fill="#c9ccd1" stroke="none" stroke-width="1" />
+<rect x="661.0" y="281.0" width="4.0" height="3.0" rx="0" fill="#c9ccd1" stroke="none" stroke-width="1" />
+<rect x="670.6" y="281.0" width="4.0" height="3.0" rx="0" fill="#c9ccd1" stroke="none" stroke-width="1" />
+<rect x="680.2" y="281.0" width="4.0" height="3.0" rx="0" fill="#c9ccd1" stroke="none" stroke-width="1" />
+<rect x="689.8" y="281.0" width="4.0" height="3.0" rx="0" fill="#c9ccd1" stroke="none" stroke-width="1" />
+<rect x="699.4" y="281.0" width="4.0" height="3.0" rx="0" fill="#c9ccd1" stroke="none" stroke-width="1" />
+<rect x="730.0" y="273.0" width="60.0" height="11.0" rx="2" fill="url(#chip)" stroke="#111" stroke-width="1" />
+<rect x="538.0" y="277.0" width="11.0" height="7.0" rx="1" fill="#1b1c1f" stroke="#000" stroke-width="0.5" />
+<rect x="717.0" y="277.0" width="11.0" height="7.0" rx="1" fill="#1b1c1f" stroke="#000" stroke-width="0.5" />
+<rect x="800.0" y="277.0" width="11.0" height="7.0" rx="1" fill="#1b1c1f" stroke="#000" stroke-width="0.5" />
+<rect x="845.0" y="254.0" width="150.0" height="30.0" rx="3" fill="url(#shield)" stroke="#8a9099" stroke-width="1.2" />
+<circle cx="858" cy="263" r="2.2" fill="#9aa1aa"/>
+<circle cx="874" cy="263" r="2.2" fill="#9aa1aa"/>
+<circle cx="890" cy="263" r="2.2" fill="#9aa1aa"/>
+<circle cx="906" cy="263" r="2.2" fill="#9aa1aa"/>
+<circle cx="922" cy="263" r="2.2" fill="#9aa1aa"/>
+<circle cx="938" cy="263" r="2.2" fill="#9aa1aa"/>
+<circle cx="954" cy="263" r="2.2" fill="#9aa1aa"/>
+<circle cx="970" cy="263" r="2.2" fill="#9aa1aa"/>
+<circle cx="986" cy="263" r="2.2" fill="#9aa1aa"/>
+<rect x="1005.0" y="276.0" width="11.0" height="8.0" rx="1" fill="#c9a46c" stroke="#8a6a3a" stroke-width="0.6" />
+<rect x="1022.0" y="276.0" width="11.0" height="8.0" rx="1" fill="#c9a46c" stroke="#8a6a3a" stroke-width="0.6" />
+<rect x="155.0" y="262.0" width="120.0" height="22.0" rx="3" fill="url(#rcpt)" stroke="#2a2e35" stroke-width="1.2" />
+<rect x="163.0" y="266.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="173.6" y="266.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="184.2" y="266.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="194.8" y="266.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="205.4" y="266.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="216.0" y="266.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="226.6" y="266.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="237.2" y="266.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="247.8" y="266.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="258.4" y="266.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="1025.0" y="262.0" width="120.0" height="22.0" rx="3" fill="url(#rcpt)" stroke="#2a2e35" stroke-width="1.2" />
+<rect x="1033.0" y="266.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="1043.6" y="266.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="1054.2" y="266.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="1064.8" y="266.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="1075.4" y="266.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="1086.0" y="266.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="1096.6" y="266.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="1107.2" y="266.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="1117.8" y="266.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="1128.4" y="266.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="130.0" y="74.0" width="1040.0" height="62.0" rx="4" fill="url(#ant)" stroke="#c9a66b" stroke-width="1.5" />
+<line x1="138" y1="116" x2="1162" y2="116" stroke="#6b5a3a" stroke-width="2" stroke-dasharray="2 5" stroke-linecap="round"/>
+<polyline points="605.0,136 605.0,98 260.0,98 260.0,74" fill="none" stroke="#2f6fd1" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="260.0" cy="75" r="3.5" fill="#2f6fd1"/>
+<polyline points="635.0,136 635.0,98 520.0,98 520.0,74" fill="none" stroke="#2f6fd1" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="520.0" cy="75" r="3.5" fill="#2f6fd1"/>
+<polyline points="665.0,136 665.0,98 780.0,98 780.0,74" fill="none" stroke="#2f6fd1" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="780.0" cy="75" r="3.5" fill="#2f6fd1"/>
+<polyline points="695.0,136 695.0,98 1040.0,98 1040.0,74" fill="none" stroke="#2f6fd1" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="1040.0" cy="75" r="3.5" fill="#2f6fd1"/>
+<rect x="200.0" y="60.0" width="120.0" height="14.0" rx="2" fill="url(#patch)" stroke="#a8571d" stroke-width="1.2" />
+<rect x="460.0" y="60.0" width="120.0" height="14.0" rx="2" fill="url(#patch)" stroke="#a8571d" stroke-width="1.2" />
+<rect x="720.0" y="60.0" width="120.0" height="14.0" rx="2" fill="url(#patch)" stroke="#a8571d" stroke-width="1.2" />
+<rect x="980.0" y="60.0" width="120.0" height="14.0" rx="2" fill="url(#patch)" stroke="#a8571d" stroke-width="1.2" />
+<rect x="575.0" y="136.0" width="150.0" height="26.0" rx="3" fill="url(#bfic)" stroke="#1f3f7a" stroke-width="1.3" />
+<text x="650.0" y="155.0" font-size="16" font-weight="800" fill="#ffffff" text-anchor="middle" >BFIC</text>
+<rect x="155.0" y="136.0" width="120.0" height="22.0" rx="3" fill="url(#plug)" stroke="#2a2e35" stroke-width="1.2" />
+<rect x="163.0" y="149.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="173.6" y="149.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="184.2" y="149.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="194.8" y="149.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="205.4" y="149.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="216.0" y="149.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="226.6" y="149.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="237.2" y="149.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="247.8" y="149.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="258.4" y="149.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="1025.0" y="136.0" width="120.0" height="22.0" rx="3" fill="url(#plug)" stroke="#2a2e35" stroke-width="1.2" />
+<rect x="1033.0" y="149.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="1043.6" y="149.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="1054.2" y="149.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="1064.8" y="149.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="1075.4" y="149.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="1086.0" y="149.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="1096.6" y="149.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="1107.2" y="149.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="1117.8" y="149.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<rect x="1128.4" y="149.0" width="5.0" height="7.0" rx="0" fill="#d9b25a" stroke="none" stroke-width="1" />
+<line x1="215.0" y1="180" x2="215.0" y2="240" stroke="#7f8b9b" stroke-width="2.5" stroke-dasharray="7 6"/>
+<polygon points="215.0,168 206.0,182 224.0,182" fill="#7f8b9b"/>
+<polygon points="215.0,252 206.0,238 224.0,238" fill="#7f8b9b"/>
+<line x1="1085.0" y1="180" x2="1085.0" y2="240" stroke="#7f8b9b" stroke-width="2.5" stroke-dasharray="7 6"/>
+<polygon points="1085.0,168 1076.0,182 1094.0,182" fill="#7f8b9b"/>
+<polygon points="1085.0,252 1076.0,238 1094.0,238" fill="#7f8b9b"/>
+<path d="M1192,60 h10 v102 h-10" fill="none" stroke="#d08a2e" stroke-width="2.2"/>
+<line x1="1202" y1="111.0" x2="1219" y2="111.0" stroke="#d08a2e" stroke-width="2.2"/>
+<circle cx="1225" cy="111.0" r="5" fill="#d08a2e"/>
+<text x="1241.0" y="109.0" font-size="24" font-weight="800" fill="#14202e" text-anchor="start" >안테나 PCB</text>
+<text x="1241.0" y="133.0" font-size="16" font-weight="400" fill="#5b6776" text-anchor="start" >패치 안테나 · BFIC 실장</text>
+<path d="M1192,162 h10 v96 h-10" fill="none" stroke="#7f8b9b" stroke-width="2.2"/>
+<line x1="1202" y1="210.0" x2="1219" y2="210.0" stroke="#7f8b9b" stroke-width="2.2"/>
+<circle cx="1225" cy="210.0" r="5" fill="#7f8b9b"/>
+<text x="1241.0" y="208.0" font-size="24" font-weight="800" fill="#14202e" text-anchor="start" >B2B 커넥터</text>
+<text x="1241.0" y="232.0" font-size="16" font-weight="400" fill="#5b6776" text-anchor="start" >안테나 PCB ↔ 마더보드 연결</text>
+<path d="M1192,262 h10 v92 h-10" fill="none" stroke="#1f6b45" stroke-width="2.2"/>
+<line x1="1202" y1="308.0" x2="1219" y2="308.0" stroke="#1f6b45" stroke-width="2.2"/>
+<circle cx="1225" cy="308.0" r="5" fill="#1f6b45"/>
+<text x="1241.0" y="306.0" font-size="24" font-weight="800" fill="#14202e" text-anchor="start" >마더보드 PCB</text>
+<text x="1241.0" y="330.0" font-size="16" font-weight="400" fill="#5b6776" text-anchor="start" >전원 · 제어 · RF부</text>
+<path d="M1192,354 h10 v141 h-10" fill="none" stroke="#7d8693" stroke-width="2.2"/>
+<line x1="1202" y1="424.5" x2="1219" y2="424.5" stroke="#7d8693" stroke-width="2.2"/>
+<circle cx="1225" cy="424.5" r="5" fill="#7d8693"/>
+<text x="1241.0" y="422.5" font-size="24" font-weight="800" fill="#14202e" text-anchor="start" >방열판 (Heat Sink)</text>
+<text x="1241.0" y="446.5" font-size="16" font-weight="400" fill="#5b6776" text-anchor="start" >마더보드 하부 방열</text>
+</g>
+</svg>

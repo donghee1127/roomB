@@ -1,5 +1,6 @@
 import RPi.GPIO as GPIO
 import time
+import math
 import re
 import shutil
 from datetime import datetime
@@ -35,6 +36,11 @@ ALL_CS_PINS = [8, 2, 5, 6]
 ALL_CHANNELS = [1, 2, 3, 4]
 CURRENT_TARGET_CS = []
 CURRENT_TARGET_CHANNELS = []
+
+# tx_on 으로 켜진 채널 상태. beam tilt 는 이 상태 위에서 I/Q 만 다시 쓴다.
+#   TX_STATE[cs][ch] = {'gain', 'bias', 'i', 'q', 'cal_i', 'cal_q', 'cal_phase'}
+TX_STATE = {}
+CURRENT_TILT = [0.0, 0.0]   # [H, V] deg
 
 GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
@@ -124,6 +130,95 @@ def iq_to_phase(i_reg, q_reg):
 def wrap180(deg):
     """각도를 -180 ~ +180 범위로 정규화."""
     return (deg + 180.0) % 360.0 - 180.0
+
+# =========================================================
+# 2-2. 빔 틸트(beam steering) 배열 설정
+#
+#  ※ 실제 안테나 배열에 맞게 반드시 확인/수정할 것.
+#    - ARRAY_FREQ_GHZ : 동작 주파수 (실행 중 'array' 명령으로도 변경 가능)
+#    - ARRAY_DX_MM    : 가로(horizontal) 방향 소자 간격 [mm]
+#    - ARRAY_DY_MM    : 세로(vertical) 방향 소자 간격 [mm]
+#    - ELEMENT_LAYOUT : 각 CS/CH 가 배열의 어느 위치(row, col)에 있는지
+#        row 0 = 맨 위 행, col 0 = 맨 왼쪽 열 (안테나 정면에서 바라본 기준)
+#        col 이 커지는 방향 = 오른쪽(+H), row 가 작아지는 방향 = 위쪽(+V)
+#    - TILT_SIGN_H / TILT_SIGN_V : 실측 결과 빔이 반대로 움직이면 -1 로 바꾼다.
+#
+#  위상 계산 (sine-space, 평면 배열):
+#    phi(x, y) = -360/lambda * ( x * sin(H) + y * sin(V) )   [deg]
+#    x, y 는 배열 중심 기준 소자 위치. 인접 소자 간 위상차는
+#    dphi_H = 360 * dx/lambda * sin(H),  dphi_V = 360 * dy/lambda * sin(V)
+#  최종 인가 위상 = 캘리브레이션 위상 + phi  →  Table 10~13 으로 양자화.
+# =========================================================
+SPEED_OF_LIGHT_MM_GHZ = 299.792458   # c [mm * GHz]
+
+# 4x4 배열, 7.3 GHz 동작, 소자 간격 0.58 lambda (7.3 GHz 기준, 가로/세로 동일)
+#   lambda(7.3 GHz) = 41.068 mm  ->  간격 = 0.58 * 41.068 = 23.819 mm
+# 간격은 물리적 거리(mm)로 고정해 두므로, 'array' 명령으로 주파수만 바꾸면
+# d/lambda 가 그 주파수에 맞게 자동으로 다시 계산된다.
+ARRAY_DESIGN_FREQ_GHZ = 7.3
+ARRAY_SPACING_LAMBDA = 0.58
+ARRAY_FREQ_GHZ = ARRAY_DESIGN_FREQ_GHZ
+ARRAY_DX_MM = ARRAY_SPACING_LAMBDA * SPEED_OF_LIGHT_MM_GHZ / ARRAY_DESIGN_FREQ_GHZ
+ARRAY_DY_MM = ARRAY_SPACING_LAMBDA * SPEED_OF_LIGHT_MM_GHZ / ARRAY_DESIGN_FREQ_GHZ
+TILT_SIGN_H = +1
+TILT_SIGN_V = +1
+
+# 실제 4x4 배열 배치 (안테나 정면 기준):
+#   row 0 :  CS2-4  CS2-1  CS5-4  CS5-1
+#   row 1 :  CS2-3  CS2-2  CS5-3  CS5-2
+#   row 2 :  CS8-2  CS8-3  CS6-2  CS6-3
+#   row 3 :  CS8-1  CS8-4  CS6-1  CS6-4
+ELEMENT_LAYOUT = {
+    #      CH1          CH2          CH3          CH4         (row, col)
+    8: {1: (3, 0), 2: (2, 0), 3: (2, 1), 4: (3, 1)},
+    2: {1: (0, 1), 2: (1, 1), 3: (1, 0), 4: (0, 0)},
+    5: {1: (0, 3), 2: (1, 3), 3: (1, 2), 4: (0, 2)},
+    6: {1: (3, 2), 2: (2, 2), 3: (2, 3), 4: (3, 3)},
+}
+
+def wavelength_mm():
+    return SPEED_OF_LIGHT_MM_GHZ / ARRAY_FREQ_GHZ
+
+def _layout_center():
+    rows = [rc[0] for chs in ELEMENT_LAYOUT.values() for rc in chs.values()]
+    cols = [rc[1] for chs in ELEMENT_LAYOUT.values() for rc in chs.values()]
+    return (min(rows) + max(rows)) / 2.0, (min(cols) + max(cols)) / 2.0
+
+def element_xy_mm(cs, ch):
+    """배열 중심 기준 소자 위치 (x: 오른쪽 +, y: 위쪽 +) [mm]. 레이아웃에 없으면 None."""
+    pos = ELEMENT_LAYOUT.get(cs, {}).get(ch)
+    if pos is None:
+        return None
+    row, col = pos
+    row_c, col_c = _layout_center()
+    return (col - col_c) * ARRAY_DX_MM, (row_c - row) * ARRAY_DY_MM
+
+def steering_phase_deg(cs, ch, tilt_h_deg, tilt_v_deg):
+    """H/V 틸트 각도에 대해 해당 소자에 더해야 할 위상(도). 레이아웃에 없으면 None."""
+    xy = element_xy_mm(cs, ch)
+    if xy is None:
+        return None
+    x, y = xy
+    k_deg = 360.0 / wavelength_mm()
+    u = math.sin(math.radians(tilt_h_deg)) * TILT_SIGN_H
+    v = math.sin(math.radians(tilt_v_deg)) * TILT_SIGN_V
+    return -k_deg * (x * u + y * v)
+
+def adjacent_phase_diff_deg(tilt_h_deg, tilt_v_deg):
+    """인접 소자 간 위상차 (dphi_H, dphi_V) [deg]."""
+    lam = wavelength_mm()
+    dh = 360.0 * ARRAY_DX_MM / lam * math.sin(math.radians(tilt_h_deg))
+    dv = 360.0 * ARRAY_DY_MM / lam * math.sin(math.radians(tilt_v_deg))
+    return dh, dv
+
+def max_scan_without_grating_lobe(d_mm):
+    """d/lambda 기준 grating lobe 없이 틸트 가능한 최대 각도(도). 제한 없으면 90."""
+    ratio = wavelength_mm() / d_mm - 1.0      # sin(theta_max) = lambda/d - 1
+    if ratio >= 1.0:
+        return 90.0
+    if ratio <= 0.0:
+        return 0.0
+    return math.degrees(math.asin(ratio))
 
 # =========================================================
 # 3. 샘플별 빔 캘리브레이션 데이터
@@ -450,6 +545,8 @@ def write_sequence_to_all_cs(sequence, cs_list):
 # =========================================================
 def bias_on():
     log_print("=== bias_on start ===")
+    TX_STATE.clear()
+    CURRENT_TILT[:] = [0.0, 0.0]
     GPIO.output(PIN_22, GPIO.LOW)
     log_print("+5V off")
     time.sleep(2)
@@ -613,10 +710,29 @@ def tx_on():
         log_print(f"CS{cs}: LOAD - Reg 0x028, Data 0x02, Resp {resp}")
         log_print(f"[CS{cs}] Gain & Phase applied & Loaded.")
 
+    # beam tilt 용으로 현재 Tx 상태 저장 (tilt = 0, 0 에서 시작)
+    TX_STATE.clear()
+    for cs, chs in user_config.items():
+        if not chs:
+            continue
+        TX_STATE[cs] = {}
+        for ch, vals in chs.items():
+            cal_phase = iq_to_phase(vals["i"], vals["q"])
+            if cal_phase is None:
+                log_print(f"[WARN] CS{cs} CH{ch}: calibration I/Q (0x{vals['i']:02X}, 0x{vals['q']:02X}) "
+                          f"not in phase table. Treated as 0 deg when tilting.")
+            TX_STATE[cs][ch] = dict(vals, cal_i=vals["i"], cal_q=vals["q"], cal_phase=cal_phase)
+    CURRENT_TILT[:] = [0.0, 0.0]
+
     log_print("=== tx_on done ===")
+
+    if TX_STATE and ask_yes_no("Enter beam tilt mode now?", default=True):
+        beam_tilt()
 
 def bias_off():
     log_print("=== bias_off start ===")
+    TX_STATE.clear()
+    CURRENT_TILT[:] = [0.0, 0.0]
     write_sequence_to_all_cs(DISABLE_SEQUENCE, ALL_CS_PINS)
     time.sleep(2)
 
@@ -961,11 +1077,206 @@ def show_status():
     print(f"Current target CS: {CURRENT_TARGET_CS}")
     print(f"Current target channels: {CURRENT_TARGET_CHANNELS}")
     print(f"Log file: {LOG_FILENAME}")
+    print(f"Tx active channels: " +
+          (", ".join(f"CS{cs}:{sorted(chs)}" for cs, chs in TX_STATE.items()) if TX_STATE else "(none)"))
+    print(f"Current beam tilt: H {CURRENT_TILT[0]:+.2f} deg, V {CURRENT_TILT[1]:+.2f} deg")
+    print(f"Array: {ARRAY_FREQ_GHZ:g} GHz, dx {ARRAY_DX_MM:g} mm, dy {ARRAY_DY_MM:g} mm")
+
+# =========================================================
+# 8-4. 빔 틸트 (beam steering)
+#
+#  tx_on 으로 Tx 가 켜진 상태에서 bias_on/bias_off 없이 각 채널의
+#  위상 레지스터(I/Q)만 다시 쓰고 LOAD 하여 빔 방향을 바꾼다.
+#  (PA bias, TR 모드, gain 은 건드리지 않는다)
+# =========================================================
+def apply_beam_tilt(tilt_h, tilt_v):
+    """H/V 틸트 각도(도)를 Tx 중인 모든 채널에 적용. 성공 시 True."""
+    if not TX_STATE:
+        log_print("[ERROR] No active Tx channels. Run 'tx_on' first.")
+        return False
+
+    if abs(tilt_h) >= 90.0 or abs(tilt_v) >= 90.0:
+        log_print("[ERROR] Tilt angles must be within -90 ~ +90 deg (exclusive).")
+        return False
+
+    u = math.sin(math.radians(tilt_h))
+    v = math.sin(math.radians(tilt_v))
+    if u * u + v * v > 1.0:
+        log_print(f"[ERROR] H {tilt_h:+.2f} / V {tilt_v:+.2f} deg is outside visible space "
+                  f"(sin^2(H) + sin^2(V) = {u*u + v*v:.3f} > 1).")
+        return False
+
+    lam = wavelength_mm()
+    for name, d, s in (("H", ARRAY_DX_MM, u), ("V", ARRAY_DY_MM, v)):
+        if d / lam * (1.0 + abs(s)) > 1.0:
+            log_print(f"[WARN] {name} tilt: grating lobe expected "
+                      f"(d/lambda = {d / lam:.3f}, max scan without grating lobe "
+                      f"= {max_scan_without_grating_lobe(d):.1f} deg).")
+
+    dh, dv = adjacent_phase_diff_deg(tilt_h, tilt_v)
+    log_print(f"=== Beam tilt: H {tilt_h:+.2f} deg, V {tilt_v:+.2f} deg "
+              f"({ARRAY_FREQ_GHZ:g} GHz, lambda {lam:.3f} mm) ===")
+    log_print(f"Adjacent element phase difference: H {dh:+.3f} deg/col, V {dv:+.3f} deg/row")
+
+    for cs in ALL_CS_PINS:
+        chs = TX_STATE.get(cs)
+        if not chs:
+            continue
+        for ch in sorted(chs):
+            vals = chs[ch]
+            idx = ch - 1
+            steer = steering_phase_deg(cs, ch, tilt_h, tilt_v)
+            if steer is None:
+                log_print(f"[WARN] CS{cs} CH{ch}: not in ELEMENT_LAYOUT. Phase left unchanged.")
+                continue
+
+            if tilt_h == 0.0 and tilt_v == 0.0:
+                # 0/0 은 캘리브레이션 값 그대로 복원
+                i_reg, q_reg = vals["cal_i"], vals["cal_q"]
+                target = vals["cal_phase"] or 0.0
+                quantized = target
+            else:
+                cal_phase = vals["cal_phase"] or 0.0
+                target = (cal_phase + steer) % 360.0
+                i_reg, q_reg, _, quantized = phase_to_iq(target)
+
+            resp_i = send_command(cs, REG_PHASE_I[idx], i_reg)
+            resp_q = send_command(cs, REG_PHASE_Q[idx], q_reg)
+            vals["i"], vals["q"] = i_reg, q_reg
+            log_print(
+                f"CS{cs} CH{ch}: steer {wrap180(steer):+8.3f} deg, target {target:8.3f} deg -> "
+                f"{quantized:8.4f} deg (err {wrap180(quantized - target):+6.3f}), "
+                f"I 0x{i_reg:02X} Resp {resp_i}, Q 0x{q_reg:02X} Resp {resp_q}"
+            )
+
+        resp = send_command(cs, 0x028, 0x02)
+        log_print(f"CS{cs}: LOAD - Reg 0x028, Data 0x02, Resp {resp}")
+
+    CURRENT_TILT[:] = [float(tilt_h), float(tilt_v)]
+    log_print(f"Beam tilt applied: H {tilt_h:+.2f} deg, V {tilt_v:+.2f} deg")
+    return True
+
+def _parse_tilt_input(parts):
+    """입력 토큰을 (H, V) 로 해석. 해석 실패 시 None.
+
+    허용 형식:  '10 -5' / '10,-5'  (H, V 동시)
+               'h 10'  /  'v -5'   (한 축만 변경, 다른 축은 현재값 유지)
+               '0' / 'reset'       (H=0, V=0)
+    """
+    try:
+        if len(parts) == 1 and parts[0] in ("0", "reset", "zero"):
+            return 0.0, 0.0
+        if len(parts) == 2 and parts[0] in ("h", "v"):
+            val = float(parts[1])
+            return (val, CURRENT_TILT[1]) if parts[0] == "h" else (CURRENT_TILT[0], val)
+        if len(parts) == 2:
+            return float(parts[0]), float(parts[1])
+    except ValueError:
+        pass
+    return None
+
+def show_tilt():
+    dh, dv = adjacent_phase_diff_deg(*CURRENT_TILT)
+    print(f"Current tilt: H {CURRENT_TILT[0]:+.2f} deg, V {CURRENT_TILT[1]:+.2f} deg "
+          f"(dphi H {dh:+.3f} deg/col, V {dv:+.3f} deg/row)")
+    print(f"{'CS':>4} {'CH':>3} {'(row,col)':>10} {'I':>5} {'Q':>5} {'phase':>10}")
+    for cs in ALL_CS_PINS:
+        for ch in sorted(TX_STATE.get(cs, {})):
+            vals = TX_STATE[cs][ch]
+            pos = ELEMENT_LAYOUT.get(cs, {}).get(ch)
+            phase = iq_to_phase(vals["i"], vals["q"])
+            phase_s = f"{phase:8.3f}" if phase is not None else "(custom)"
+            print(f"{cs:>4} {ch:>3} {str(pos):>10}  0x{vals['i']:02X}  0x{vals['q']:02X} {phase_s:>10}")
+
+def beam_tilt(args=None):
+    """빔 틸트 명령. 인자가 있으면 한 번 적용, 없으면 대화형 틸트 모드."""
+    if not TX_STATE:
+        print("No active Tx channels. Run 'tx_on' first.")
+        return
+
+    if args:
+        parsed = _parse_tilt_input([a.lower() for a in " ".join(args).replace(",", " ").split()])
+        if parsed is None:
+            print("Usage: tilt <H_deg> <V_deg> | tilt h <deg> | tilt v <deg> | tilt 0")
+            return
+        apply_beam_tilt(*parsed)
+        return
+
+    print("")
+    print("=== Beam tilt mode (Tx stays on, only phase registers are rewritten) ===")
+    print("  <H> <V>   : set both, e.g. '15 -10'   (H: + = right, V: + = up)")
+    print("  h <deg>   : change horizontal only, e.g. 'h 20'")
+    print("  v <deg>   : change vertical only,   e.g. 'v -5'")
+    print("  0         : back to boresight (calibration phase)")
+    print("  show      : show current per-channel phase")
+    print("  q         : leave tilt mode (beam keeps the current tilt)")
+    while True:
+        text = input(f"tilt [H {CURRENT_TILT[0]:+.1f}, V {CURRENT_TILT[1]:+.1f}]> ").strip().lower()
+        if text == "":
+            continue
+        if text in ["q", "quit", "exit", "back", "done", "cancel"]:
+            log_print(f"Leaving tilt mode. Beam stays at H {CURRENT_TILT[0]:+.2f}, V {CURRENT_TILT[1]:+.2f} deg.")
+            break
+        if text == "show":
+            show_tilt()
+            continue
+        parsed = _parse_tilt_input(text.replace(",", " ").split())
+        if parsed is None:
+            print("Invalid input. Examples: '15 -10', 'h 20', 'v -5', '0', 'show', 'q'")
+            continue
+        apply_beam_tilt(*parsed)
+
+def _ask_float_keep(prompt, current):
+    while True:
+        text = input(f"{prompt} [{current:g}] (Enter = keep): ").strip()
+        if text == "":
+            return current
+        try:
+            val = float(text)
+            if val <= 0:
+                print("Value must be positive.")
+                continue
+            return val
+        except ValueError:
+            print("Invalid number.")
+
+def array_config():
+    """배열 주파수/간격 조회 및 변경, 레이아웃 표시."""
+    global ARRAY_FREQ_GHZ, ARRAY_DX_MM, ARRAY_DY_MM
+    lam = wavelength_mm()
+    print("=== Array geometry ===")
+    print(f"Frequency : {ARRAY_FREQ_GHZ:g} GHz (lambda {lam:.3f} mm)")
+    print(f"dx (H)    : {ARRAY_DX_MM:g} mm (d/lambda {ARRAY_DX_MM / lam:.3f}, "
+          f"grating-lobe-free scan +-{max_scan_without_grating_lobe(ARRAY_DX_MM):.1f} deg)")
+    print(f"dy (V)    : {ARRAY_DY_MM:g} mm (d/lambda {ARRAY_DY_MM / lam:.3f}, "
+          f"grating-lobe-free scan +-{max_scan_without_grating_lobe(ARRAY_DY_MM):.1f} deg)")
+    print("Layout (front view, row 0 = top, col 0 = left):")
+    grid = {}
+    for cs, chs in ELEMENT_LAYOUT.items():
+        for ch, (r, c) in chs.items():
+            grid[(r, c)] = f"CS{cs}-{ch}"
+    rows = sorted({r for r, _ in grid})
+    cols = sorted({c for _, c in grid})
+    for r in rows:
+        print("   " + " ".join(f"{grid.get((r, c), '.'):>7}" for c in cols))
+
+    if not ask_yes_no("Change frequency / spacing?", default=False):
+        return
+    ARRAY_FREQ_GHZ = _ask_float_keep("Frequency [GHz]", ARRAY_FREQ_GHZ)
+    ARRAY_DX_MM = _ask_float_keep("dx (horizontal spacing) [mm]", ARRAY_DX_MM)
+    ARRAY_DY_MM = _ask_float_keep("dy (vertical spacing) [mm]", ARRAY_DY_MM)
+    log_print(f"Array set: {ARRAY_FREQ_GHZ:g} GHz, dx {ARRAY_DX_MM:g} mm, dy {ARRAY_DY_MM:g} mm "
+              f"(lambda {wavelength_mm():.3f} mm)")
+
+    if TX_STATE and CURRENT_TILT != [0.0, 0.0]:
+        if ask_yes_no(f"Re-apply current tilt (H {CURRENT_TILT[0]:+.2f}, V {CURRENT_TILT[1]:+.2f}) "
+                      f"with the new geometry?", default=True):
+            apply_beam_tilt(*CURRENT_TILT)
 
 # =========================================================
 # 9. 메인 명령 루프
 # =========================================================
-COMMANDS = "bias_on, phase_cal, tx_on, bias_off, sample, cal, status, exit"
+COMMANDS = "bias_on, phase_cal, tx_on, tilt, array, bias_off, sample, cal, status, exit"
 
 def main():
     log_print(f"Log path: {LOG_FILENAME}")
@@ -973,10 +1284,13 @@ def main():
     log_print(f"Commands: {COMMANDS}")
     log_print(f"Current conduction board sample: #{CURRENT_SAMPLE}")
     log_print("New board flow: bias_on -> phase_cal -> tx_on")
+    log_print("Beam steering: tx_on -> tilt (e.g. 'tilt 15 -10', or 'tilt' for interactive mode)")
 
     try:
         while True:
-            cmd = input("ncr2> ").strip().lower()
+            line = input("ncr2> ").strip().lower().split()
+            cmd = line[0] if line else ""
+            args = line[1:]
 
             if cmd == "bias_on":
                 bias_on()
@@ -984,6 +1298,10 @@ def main():
                 phase_cal()
             elif cmd == "tx_on":
                 tx_on()
+            elif cmd == "tilt":
+                beam_tilt(args)
+            elif cmd == "array":
+                array_config()
             elif cmd == "bias_off":
                 bias_off()
             elif cmd == "sample":
